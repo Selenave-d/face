@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的朋友们都是 JavaScript 画的</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
+  canvas { display: block; cursor: crosshair; }
+  #titel {
+    position: fixed; top: 30px; left: 34px; transform: rotate(-2.5deg);
+    font: 19px/1.9 "Courier New", ui-monospace, monospace; color: #3a3440;
+    user-select: none; pointer-events: none; white-space: nowrap;
+  }
+  #titel mark {
+    background: #2e2839; color: #f6f2ea; padding: 2px 9px;
+    display: inline-block; transform: rotate(1.4deg);
+  }
+  #titel mark:last-of-type { transform: rotate(-1.1deg); }
+  #neues {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    font: 12px/1 "Courier New", monospace; letter-spacing: 3px; color: #7a7268;
+    background: transparent; border: 1px solid #c9c1b5; border-radius: 999px;
+    padding: 9px 22px 8px 25px; cursor: pointer; user-select: none;
+  }
+  #neues:hover { color: #2b2320; border-color: #2b2320; }
+</style>
+</head>
+<body>
+<canvas id="blatt"></canvas>
+<div id="titel">我的 <mark>朋友们</mark> 都是 <mark>javascript</mark> 画的</div>
+<button id="neues">换 一 版</button>
+<script src="app.js"></script>
+</body>
+</html>
