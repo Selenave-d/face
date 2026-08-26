@@ -924,29 +924,33 @@ function zeichneSchwanz(stift, rec, k, wag) {
   }
 }
 
-/* 附加：斑点/雀斑/胡须/眼镜/泪 */
+/* 墨块斑点：单独拆出来，画在五官之前 —— 墨可以糊在头发和身上，但不能盖住眼睛嘴 */
+function zeichneFlecken(stift, rec, k) {
+  if (!rec.extras.spots) return;
+  const cy = -.95 * k;
+  const R = .44 * rec.skull.s * k;
+  const r = _mb(_h2(rec.seed, 41));
+  const n = 2 + Math.floor(r() * 3);
+  const ex = .44 * rec.skull.wf * rec.skull.s * .44 * rec.eyes.sx * k;
+  const stellen = [
+    () => [(r() < .5 ? 1 : -1) * ex * (1.35 + r() * .35), cy - R * (.25 + r() * .25)],   // 眉骨外侧（不压眼睛）
+    () => [(r() < .5 ? 1 : -1) * R * (0.7 + r() * .3), cy - R * (0.5 + r() * .4)],           // 耳侧
+    () => [(r() - .5) * R * .5, -.3 * k + (r() - .5) * .16 * k],                             // 身上
+    () => [(r() - .5) * R * 1.1, cy + (r() - .5) * R * .8],
+  ];
+  for (let i = 0; i < n; i++) {
+    const [sx, sy] = stellen[i % stellen.length]();
+    const fleck = kreisPts(sx, sy, (.07 + r() * .07) * k, (.05 + r() * .06) * k, 10, .28, rec.seed + i * 13);
+    stift.tone(fleck, { dunkel: true, label: 150 + i, k });
+    stift.line(fleck, 1, { closed: true, label: 151 + i, alpha: .5 });
+  }
+}
+
+/* 附加：雀斑/胡须/眼镜/泪 */
 function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
   const x = rec.extras;
   const cy = -.95 * k;
   const R = .44 * rec.skull.s * k;
-  if (x.spots) {
-    // 涂鸦墨块：2~4 个不规则小团，优先落在眼眶周围/耳侧/身上
-    const r = _mb(_h2(rec.seed, 41));
-    const n = 2 + Math.floor(r() * 3);
-    const ex = .44 * rec.skull.wf * rec.skull.s * .44 * rec.eyes.sx * k;
-    const stellen = [
-      () => [(r() < .5 ? 1 : -1) * ex * (0.9 + r() * .3), cy - R * .1 + (r() - .5) * R * .3],   // 眼眶周围
-      () => [(r() < .5 ? 1 : -1) * R * (0.7 + r() * .3), cy - R * (0.5 + r() * .4)],           // 耳侧
-      () => [(r() - .5) * R * .5, -.3 * k + (r() - .5) * .16 * k],                             // 身上
-      () => [(r() - .5) * R * 1.1, cy + (r() - .5) * R * .8],
-    ];
-    for (let i = 0; i < n; i++) {
-      const [sx, sy] = stellen[i % stellen.length]();
-      const fleck = kreisPts(sx, sy, (.07 + r() * .07) * k, (.05 + r() * .06) * k, 10, .28, rec.seed + i * 13);
-      stift.tone(fleck, { dunkel: true, label: 150 + i, k });
-      stift.line(fleck, 1, { closed: true, label: 151 + i, alpha: .5 });
-    }
-  }
   if (x.freckles) {
     for (const s of [-1, 1]) {
       const r = _mb(_h2(rec.seed, 43 + s));
@@ -956,11 +960,13 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
     }
   }
   if (x.whiskers) {
-    // 胡须从吻瓣两侧向外伸，起点在颊上（不要穿过吻瓣）
+    // 胡须从颊上向外伸：起点按吻瓣实际半宽外推，宽吻的狗不会从吻里长出胡须
     const my = cy + .28 * k;
+    const schnauzeRx = rec.skull.muzzle * k * .5 * (rec.skull.fett ?? 1);
+    const x0 = Math.max(R * .55, schnauzeRx + .06 * k);
     for (const s of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
-        stift.line([[s * R * .55, my + (i - 1) * .03 * k], [s * R * 1.05, my + (i - 1) * .07 * k]], 1, { label: 155 + i + s * 10, alpha: .6 });
+        stift.line([[s * x0, my + (i - 1) * .03 * k], [s * (x0 + R * .5), my + (i - 1) * .07 * k]], 1, { label: 155 + i + s * 10, alpha: .6 });
       }
     }
   }
@@ -1028,6 +1034,8 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   // 头顶与发型
   zeichneCrest(stift, rec, k, kopf);
   zeichneHair(stift, rec, k, kopf);
+  // 墨块斑点：在五官之前落墨（可以糊在头发身上，不盖眼睛）
+  zeichneFlecken(stift, rec, k);
 
   // 脸：按表情换眼/眉/嘴（blick = 视线偏移，瞳孔小幅瞟动）
   zeichneBrauen(stift, rec, k, face);
