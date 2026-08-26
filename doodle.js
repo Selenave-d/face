@@ -758,7 +758,8 @@ function zeichneCrest(stift, rec, k, kopf) {
       break;
     case 'bunny':
       for (const s of [-1, 1]) {
-        // 长椭圆耳：允许一竖一垂（垂的那只向外倒）
+        // 长椭圆耳：允许一竖一垂（垂的那只向外倒）。
+        // 竖耳的弧角要越过头顶（端点 y > topY），耳根扎进头轮廓里才不悬空
         const haengt = rec.crest.ohrHaengt === s;
         const x = s * R * .32;
         if (haengt) {
@@ -769,8 +770,8 @@ function zeichneCrest(stift, rec, k, kopf) {
           ]);
           stift.line(tapered(spine, R * .16, R * .09), 1.5, { closed: true, label: 106 + s });
         } else {
-          stift.line(bogenPts(x, topY - R * .55 * len, R * .18, R * .65 * len, Math.PI * .9, Math.PI * 2.1, 10), 1.5, { label: 106 + s });
-          stift.line(bogenPts(x, topY - R * .5 * len, R * .08, R * .45 * len, Math.PI * .95, Math.PI * 2.05, 8), 1, { label: 108 + s, alpha: .5 });
+          stift.line(bogenPts(x, topY - R * .48 * len, R * .18, R * .62 * len, Math.PI * .68, Math.PI * 2.32, 12), 1.5, { label: 106 + s });
+          stift.line(bogenPts(x, topY - R * .42 * len, R * .08, R * .5 * len, Math.PI * .72, Math.PI * 2.28, 9), 1, { label: 108 + s, alpha: .5 });
         }
       }
       break;
