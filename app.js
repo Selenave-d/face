@@ -1,14 +1,15 @@
-/* 一版摇头晃脑的脑袋 —— avatar-presse 效果复刻
- * 零依赖。三层结构与原作一致：
- *   DNA   —— 这颗头"是谁"：一个 seed 推出的所有稳定特征
- *   Regung —— 它"正在做什么"：转头、瞳孔、眨眼、呼吸、嘟囔
- *   Stift  —— "画成什么样"：填充式笔尖带、双线套印、8fps 沸腾
+/* 纸上的小人 —— 程序手绘的纸面小人
+ * 零依赖，双击即跑。一个种子推出一个人，三层结构：
+ *   基因 —— 这个人"是谁"：一个 seed 推出的所有稳定特征（颅骨、五官、发型、身材、姓名）
+ *   神态 —— 他"正在做什么"：转头看指针、眨眼、呼吸、嘟囔
+ *   笔触 —— "画成什么样"：填充式笔尖带、双线套印、8fps 线条沸腾
  *
- * 与初版不同，这里按原作机制重写：
+ * 做法：
  *   颅骨是一个参数化 3D 壳（超椭球 + 鼓包 + 方感），每帧只做旋转+投影，
  *   轮廓是从点云按角度分桶取最远距离再平滑得到的剪影；
  *   五官贴在壳面上的局部切平面坐标系（feld）里，转头时自然透视变形；
- *   笔触不是 ctx.stroke，而是沿法向抖动、两端收尖的填充色带。
+ *   线条不是 ctx.stroke，而是沿法向抖动、两端收尖的填充色带；
+ *   身体与头共用同一套笔和同一盘淡色，肩、袖、裤、鞋都是细线淡填。
  */
 'use strict';
 
@@ -30,9 +31,14 @@ function labelSeed(seed, label) {
   }
   return (seed ^ (h >>> 0)) >>> 0;
 }
-// 原作风格的随机流：先扔掉 8 个值，再提供 range/int/pick/chance/weighted
+// 随机流：整数种子先做 splitmix 式强散列（相邻种子也不相关），
+// 再扔掉 8 个值拉开差距，提供 range/int/pick/chance/weighted
 function strom(seed, label) {
-  const r = mulberry32((label !== undefined ? labelSeed(seed, label) : seed) * 2654435761 % 4294967296);
+  let a = label !== undefined ? labelSeed(seed, label) : seed;
+  a = Math.imul(a ^ (a >>> 16), 2246822519);
+  a = Math.imul(a ^ (a >>> 13), 3266489917);
+  a = (a ^ (a >>> 16)) >>> 0;
+  const r = mulberry32(a * 2654435761 % 4294967296);
   for (let i = 0; i < 8; i++) r();
   return {
     n: r,
@@ -66,36 +72,49 @@ function oklch(l, c, h) {
   return `rgb(${q(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3)},${q(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3)},${q(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3)})`;
 }
 
-// 肤色色相池与发色/织物色池（l, c, h 三元的取用规则与原作一致）
-const HAUT_HUES = [292, 66, 44, 22, 310, 250];
-const HAAR_DUNKEL = [[.3, .03, 285], [.34, .07, 58], [.62, .012, 280], [.72, .08, 76], [.46, .1, 40], [.24, .02, 300]];
-const HAAR_BUNT = [[.7, .115, 355], [.63, .12, 305], [.72, .095, 190], [.6, .11, 252], [.88, .015, 280]];
-const STOFF_POOL = [[.72, .06, 268], [.66, .09, 200], [.7, .08, 140], [.68, .1, 40]];
+// 发色分布贴合日常街头：黑与深棕为主，灰白/浅棕少量，亮彩色罕见
+// （分段取色：50% 近黑、30% 深棕、17% 灰白浅棕、3% 亮色）
+const HAAR_SCHWARZ = [[.24, .02, 300], [.27, .025, 292], [.3, .03, 285]];
+const HAAR_BRAUN = [[.34, .07, 58], [.38, .08, 50], [.42, .09, 46], [.46, .1, 40]];
+const HAAR_HELL = [[.62, .012, 280], [.72, .08, 76], [.78, .01, 90]];
+const HAAR_BUNT = [[.7, .115, 355], [.63, .12, 305], [.72, .095, 190], [.6, .11, 252]];
+// 服装色池：莫兰迪式低饱和（米白/燕麦/雾蓝/灰粉/鼠尾草绿/灰紫），大面积色块不抢线
+const STOFF_POOL = [[.86, .02, 90], [.82, .035, 75], [.78, .035, 230], [.8, .03, 15], [.8, .03, 150], [.78, .025, 300]];
 const pickIdx = (t, arr) => arr[Math.min(arr.length - 1, Math.floor(t * arr.length))];
+function haarFarbe(t) {
+  if (t < .5) return pickIdx(t / .5, HAAR_SCHWARZ);
+  if (t < .8) return pickIdx((t - .5) / .3, HAAR_BRAUN);
+  if (t < .97) return pickIdx((t - .8) / .17, HAAR_HELL);
+  return pickIdx((t - .97) / .03, HAAR_BUNT);
+}
 
 function makePalette(p) {
-  const hautH = pickIdx(p.hautT, HAUT_HUES);
-  const haar = p.haarT >= .82 ? pickIdx((p.haarT - .82) / .18, HAAR_BUNT) : pickIdx(p.haarT / .82, HAAR_DUNKEL);
+  // 东亚暖白/浅米肤色：暖色相、极低的彩度，个体间只有细微差别
+  const hautH = 62 + p.hautT * 26;
+  const haar = haarFarbe(p.haarT);
   const stoff = pickIdx(p.akzentT, STOFF_POOL);
   const tinteL = .25 + p.tinteT * .05;
   return {
     tinte: oklch(tinteL, .03, 282),
     tinteWeich: oklch(tinteL + .28, .02, 282),
-    haut: oklch(.955, .007, hautH),
-    hautTief: oklch(.918, .0112, hautH),
+    haut: oklch(.955, .011, hautH),
+    hautTief: oklch(.905, .02, hautH),
     schatten: 'rgba(40,30,60,0.075)',
     akzent: oklch(.72, .115, 28),
     haar: oklch(haar[0], haar[1], haar[2]),
     haarDunkel: haar[0] < .5,
     stoff: oklch(stoff[0], stoff[1], stoff[2]),
-    stoffTief: oklch(stoff[0] - .28, stoff[1] * 1.15, stoff[2]),
+    stoffTief: oklch(stoff[0] - .2, stoff[1] * 1.05, stoff[2]),
+    // 裤子明度略低但仍低饱和，不要纯黑深棕大色块
+    hose: oklch(Math.max(.56, stoff[0] - .24), Math.min(.045, stoff[1] * 1.1), stoff[2]),
+    schuh: oklch(.42, .035, 50),
     pflaster: oklch(.93, .03, 80),
   };
 }
 const PAPIER = oklch(.972, .006, 84);
 const PAPIER_DUNKEL = oklch(.86, .01, 84);
 
-/* ================= Stift：填充色带式的笔 =================
+/* ================= 笔触：填充色带式的笔 =================
  * 一条"线"= 沿路径法向抖动、两端按 spitz 收尖的填充多边形；
  * 默认再叠一遍半宽、抖得更厉害、透明度 0.32 的套印。
  * 噪声表按 spur（笔画名）缓存，混入按 8fps 量化的 tick —— 线条在沸腾。
@@ -154,7 +173,7 @@ function stiftResample(pts, closed, glatt) {
     total += Math.hypot(b.x - a.x, b.y - a.y);
   }
   if (total < 1e-6) return src;
-  const count = Math.max(6, Math.min(180, Math.round(total / .022)));
+  const count = Math.max(6, Math.min(140, Math.round(total / .028)));
   const step = total / count, out = [src[0]];
   let carry = 0;
   for (let i = 0; i < segs; i++) {
@@ -538,17 +557,23 @@ function punkt3d(x, y, z, ctx3d) {
 }
 function m0(c) { return c.m; }
 
-/* ================= DNA：一个 seed 一张脸 ================= */
-/* 变体目录与权重取自原作的特征表；nichtMit/nurBei 约束做了简化。 */
+/* ================= 基因：一个 seed 一个人 ================= */
+/* 变体目录保持不变，权重调成日常街头的人群分布。 */
 
-const AUGEN_W = [['punkt', 1.4], ['knopf', 1.6], ['ring', 1], ['mandel', 1.2], ['strich', .6], ['zwinker', .7], ['schlaefrig', .9], ['weit', 1.2], ['offen', 2], ['froh', 1], ['kreuz', .35], ['stern', .4], ['kritzel', .5]];
-const NASEN_W = [['haken', 1.4], ['komma', 1], ['strich', .8], ['welle', .8], ['knopf', 1], ['lang', 1.2], ['punkte', 1]];
+// 杏眼/细眼/豆豆眼居多，大圆眶少见，搞怪眼（x_x、星星、涂鸦）极罕见
+const AUGEN_W = [['punkt', 1.8], ['knopf', 1.8], ['ring', .5], ['mandel', 2.2], ['strich', 1.4], ['zwinker', .3], ['schlaefrig', 1.2], ['weit', .5], ['offen', .9], ['froh', 1], ['kreuz', .03], ['stern', .03], ['kritzel', .06]];
+const NASEN_W = [['haken', 1.4], ['komma', 1.4], ['strich', 1.1], ['welle', .8], ['knopf', 1], ['lang', 1.2], ['punkte', 1]];
 const MUENDER_W = [['strich', 1], ['laecheln', 2], ['klein', 1], ['welle', .8], ['offen', .8], ['lippen', .9], ['grinsen', 1.2], ['zaehne', .8], ['hasenzahn', .7], ['schief', 1], ['zickzack', .6]];
-const HAAR_W = [['keine', 1.4], ['flaum', 1.4], ['haube', 1.4], ['pony', 1.2], ['locken', 1], ['stacheln', .8], ['antenne', .6], ['seitenscheitel', 1.4], ['lockenwolke', 1.1], ['igel', 1], ['zoepfe', .8], ['dutt', .8], ['afro', 1.2]];
-const DECKUNG_W = [['keine', 9], ['stirnband', 1], ['kappe', 1], ['hut', 1], ['kopfhoerer', .9]];
-const BRILLE_W = [['keine', 8], ['rund', 1.4], ['eckig', 1]];
-const BART_W = [['keiner', 12], ['stoppeln', 1], ['schnauz', .8], ['stoppelschnauz', .7]];
-const BACKE_W = [['keine', 2], ['rosig', 3], ['punkte', 1.6], ['sommersprossen', 1.6]];
+// 常见款为主：侧分/短发/齐刘海/丸子头/辫子；爆炸头与卷发云极罕见
+const HAAR_W = [['keine', .9], ['flaum', 1], ['haube', 1.8], ['pony', 1.8], ['locken', .5], ['stacheln', .9], ['antenne', .15], ['seitenscheitel', 2.2], ['lockenwolke', .05], ['igel', .9], ['zoepfe', 1.1], ['dutt', 1.3], ['afro', .05]];
+// 帽饰整体少见
+const DECKUNG_W = [['keine', 16], ['stirnband', .8], ['kappe', .8], ['hut', .4], ['kopfhoerer', .5]];
+// 眼镜常见
+const BRILLE_W = [['keine', 6], ['rund', 1.5], ['eckig', 1.2]];
+// 胡须稀少
+const BART_W = [['keiner', 30], ['stoppeln', .8], ['schnauz', .4], ['stoppelschnauz', .3]];
+// 雀斑少见，红晕清淡地保留
+const BACKE_W = [['keine', 2.4], ['rosig', 3], ['punkte', 1.2], ['sommersprossen', .6]];
 const BRAUE_W = [['keine', 2], ['duenn', 2], ['dick', 1.2], ['hoch', 1.2], ['schraeg', 1], ['sorge', .8]];
 const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2]];
 const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4]];
@@ -556,13 +581,21 @@ const ZIERRAT_W = [['keiner', 7], ['ohrring', 1.2], ['pflaster', .8]];
 // 这些发型会盖住头顶，发带/便帽/耳机就不出现了
 const HOHE_FRISUREN = new Set(['haube', 'pony', 'seitenscheitel', 'lockenwolke', 'igel', 'zoepfe', 'dutt', 'afro']);
 
-const SYLL = ['ri', 'xel', 'sen', 'ni', 'ko', 'du', 'fa', 'ril', 'to', 'ba', 'lu', 'gi', 'sol',
-  'wu', 'ze', 'pa', 'mon', 'ris', 'fen', 'ed', 'ok', 'ya', 'chi', 'ne', 'tar', 'vi', 'lo', 'dim', 'sü', 'bek', 'tir', 'law', 'per'];
+// 中文姓名：常见姓 + 1~2 个名用字
+const XING = ['王', '李', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴', '徐', '孙', '马', '朱', '胡', '郭', '何', '林', '罗', '郑', '梁', '谢', '宋', '唐', '许', '韩', '冯', '邓', '曹', '彭'];
+const MING_ZI = ['伟', '芳', '娜', '敏', '静', '磊', '洋', '勇', '杰', '涛', '明', '超', '秀', '英', '雪', '晨', '宇', '欣', '怡', '建', '军', '平', '文', '慧', '强', '斌', '婷', '浩', '然', '宁', '晴', '嘉', '子', '小', '晓', '雨', '思', '一', '若'];
+const MING_PIAN = ['子涵', '雨桐', '思远', '一诺', '若曦', '嘉怡', '晓峰', '文博', '慧敏', '浩然', '欣怡', '梓萱', '沐宸', '语嫣', '可乐'];
+
+function chinesischerName(r) {
+  const nach = r.pick(XING);
+  if (r.chance(.45)) return nach + r.pick(MING_PIAN);
+  return nach + r.pick(MING_ZI) + (r.chance(.55) ? r.pick(MING_ZI) : '');
+}
 
 function makeDNA(seed) {
   const r = strom(seed);
   const lay = strom(seed, 'layout');
-  // —— 五官布局（原作 M()）：v 向上为正，眼在鼻上、鼻在嘴上 ——
+  // —— 五官布局：v 向上为正，眼在鼻上、鼻在嘴上 ——
   const augeU = lay.range(.3, .8);
   const nasenV = lay.range(-.36, -.14);
   const spreiz = lay.range(.62, 1.1);
@@ -636,13 +669,19 @@ function makeDNA(seed) {
   const zeichen = waehle(zeichenTab, 'zeichen');
   const zierrat = waehle(ZIERRAT_W, 'zierrat');
   const hand = strom(seed, 'handschrift');
-  // 名字：2~3 个音节的假名
-  const namenR = strom(seed, 'name');
-  const nSyll = namenR.chance(.6) ? 3 : 2;
-  let name = '';
-  for (let i = 0; i < nSyll; i++) name += namenR.pick(SYLL);
+  // 身材：肩宽三档、胖瘦一档、头身比 2.2~2.6，服装/下装/鞋各若干变体
+  const koerperR = strom(seed, 'koerper');
+  const koerper = {
+    ratio: koerperR.range(2.2, 2.6),
+    schulter: koerperR.weighted([['schmal', 1], ['normal', 2.2], ['breit', 1.2]]),
+    bauch: koerperR.range(.92, 1.14),
+    oberteil: koerperR.weighted([['tshirt', 1.4], ['hemd', 1.1], ['hoodie', 1], ['cardigan', .9]]),
+    hose: koerperR.weighted([['lang', 3], ['rock', 1.1]]),
+    schuhe: koerperR.weighted([['flach', 1.4], ['rund', 1.2], ['stiefel', .7]]),
+    armW: koerperR.range(.8, 1.1),
+  };
   return {
-    seed, kopf, pose, ansatzV, layout,
+    seed, kopf, pose, ansatzV, layout, koerper,
     merkmale: { auge, nase, mund, haar, kopfbedeckung, brille, bart, braue, backe, kragen, zeichen, zierrat },
     asym: r.range(-.05, .05),
     palette: { hautT: r.n(), haarT: r.n(), akzentT: r.n(), tinteT: r.n() },
@@ -652,7 +691,7 @@ function makeDNA(seed) {
     taktVersatz: hand.n(),
     bartLage: hand.n(),
     punktMass: hand.range(.85, 1.55),
-    name: name.toUpperCase(),
+    name: chinesischerName(strom(seed, 'name')),
   };
 }
 
@@ -676,8 +715,8 @@ const MUND_BASIS = {
   welle: [[-.5, .1], [-.16, -.18], [.16, .2], [.5, -.1]],
 };
 
-/* ================= Regung：每颗头的活动状态 =================
- * 弹簧转头 + 视线快、头慢 + 眨眼 + 呼吸 + 嘟囔，参数照原作 blick 模块。
+/* ================= 神态：每个人的活动状态 =================
+ * 弹簧转头 + 视线快、头慢 + 眨眼 + 呼吸 + 嘟囔。
  */
 
 const POSE_LIMIT = { yaw: .4, pitch: .26, roll: .14 };
@@ -707,6 +746,34 @@ class Head {
     this.plapperTempo = 7 + r() * 4;
     this.wuerfel = r;
     this.cx = 0; this.cy = 0; this.mass = 100;
+    // 动作状态：当前动作、切换时刻、上一姿态（过渡插值用）、自动动作计时
+    this.akName = 'stand';
+    this.akSeit = 0;
+    this.akVon = null;
+    this.akBis = 0;
+    this.akAuto = 15 + this.wuerfel() * 15;
+  }
+
+  // 切换动作：先拍下当前混合姿态，再在新旧之间做 0.25s 插值
+  setAktion(name, t, dauer = 0) {
+    if (!AKTIONEN[name]) return;
+    this.akVon = this.motionPose(t);
+    this.akName = name;
+    this.akSeit = t;
+    this.akBis = dauer ? t + dauer : 0;
+    if (typeof syncAktionsUI === 'function') syncAktionsUI(name);
+  }
+
+  // 当前帧的姿态：动作相位按 12fps 量化（翻页书），过渡插值用真实时间
+  motionPose(t) {
+    const qt = Math.floor(t * 12) / 12;
+    let p = AKTIONEN[this.akName].pose(qt, this.dna);
+    if (this.akVon) {
+      const f = smooth((t - this.akSeit) / .25);
+      if (f >= 1) this.akVon = null;
+      else p = mixPose(this.akVon, p, f);
+    }
+    return p;
   }
 
   update(dt, t, pointer) {
@@ -746,6 +813,14 @@ class Head {
       this.plappertBis = t + 1.2 + this.wuerfel() * 1.8;
       this.naechstesPlappern = this.plappertBis + (this.wach > .5 ? 4 : 10) + this.wuerfel() * 16;
     }
+    // 偶尔自己做一个随机动作（只在站立时发起），做完回站立；
+    // 一墙脸没有身体、一群人怕挤到邻居，都不发动
+    if (!WAND && !CROWD && this.akName === 'stand' && t > this.akAuto) {
+      const wahl = ['wave', 'walk', 'jump', 'dance'][Math.floor(this.wuerfel() * 4)];
+      this.akAuto = t + 15 + this.wuerfel() * 15;
+      this.setAktion(wahl, t, AKTIONEN[wahl].periode * (1.5 + this.wuerfel()));
+    }
+    if (this.akBis && t > this.akBis) this.setAktion('stand', t, 0);
   }
 
   mundOffen(t) {
@@ -2134,8 +2209,411 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal) {
     stift.zug([{ x: a.x - .1, y: a.y }, { x: mx, y: untenY + l * .12 }, { x: b.x + .1, y: b.y }],
       { spur: 'kragen', w: .022, wackel: .004, farbe: pal.tinte });
   }
+  return { mx, halb, untenY };
 }
 
+/* ================= 身体 =================
+ * 与头共用一支笔：细墨线、淡色填充、同样的沸腾与套印。
+ * 骨架：手臂是 肩-肘-腕 三点链、腿是 髋-膝-踝 三点链，袖子/裤管沿链走。
+ * 默认姿态（垂手并腿站立）与静态版视觉一致；动作只是把偏移叠到关节上。
+ */
+
+/* ---------------- 动作表 ----------------
+ * 每个动作 = 一个姿态函数，输出对默认站姿的偏移：
+ *   dx/dy  全身位移（头跟随，脖子不断）
+ *   lean   肩部倾斜（髋部为 0）
+ *   kopfRoll 头的额外侧倾
+ *   arm[i] = {ex,ey,hx,hy}  肘/腕偏移；bein[i] = {kx,ky,fx,fy}  膝/踝偏移
+ * 相位在 motionPose 里按 12fps 量化（翻页书感），切换时 0.25s 插值。
+ * 所有偏移都是数值，动作与衣服/身材的随机流无关 —— 换装不会重掷。
+ */
+
+function neutralPose() {
+  return {
+    dx: 0, dy: 0, lean: 0, kopfRoll: 0,
+    arm: [{ ex: 0, ey: 0, hx: 0, hy: 0 }, { ex: 0, ey: 0, hx: 0, hy: 0 }],
+    bein: [{ kx: 0, ky: 0, fx: 0, fy: 0 }, { kx: 0, ky: 0, fx: 0, fy: 0 }],
+  };
+}
+function mixPose(a, b, f) {
+  const p = neutralPose();
+  for (const key of ['dx', 'dy', 'lean', 'kopfRoll']) p[key] = a[key] + (b[key] - a[key]) * f;
+  for (let i = 0; i < 2; i++) {
+    for (const key of ['ex', 'ey', 'hx', 'hy']) p.arm[i][key] = a.arm[i][key] + (b.arm[i][key] - a.arm[i][key]) * f;
+    for (const key of ['kx', 'ky', 'fx', 'fy']) p.bein[i][key] = a.bein[i][key] + (b.bein[i][key] - a.bein[i][key]) * f;
+  }
+  return p;
+}
+const TAU = Math.PI * 2;
+// 在极值处停留的正弦：挥手/摇摆需要"到位后停一拍"
+const holdSin = (t, p = .45) => { const s = Math.sin(t * TAU); return (s < 0 ? -1 : 1) * Math.pow(Math.abs(s), p); };
+const lift = (t) => Math.max(0, Math.sin(t * TAU));
+
+const AKTIONEN = {
+  // 站立：呼吸起伏 + 极轻微重心摇摆，不是雕像
+  stand: {
+    periode: 4.2,
+    pose(q, dna) {
+      const p = neutralPose();
+      p.dx = .018 * Math.sin(q * 1.5 + dna.taktVersatz * 6);
+      p.dy = .012 * Math.sin(q * 2.2 + 1);
+      p.lean = .012 * Math.sin(q * 1.1 + 2);
+      return p;
+    },
+  },
+  // 挥手：上臂举起定住，前臂从肘部左右甩两三个来回
+  wave: {
+    periode: 2.2,
+    pose(q, dna) {
+      const p = neutralPose();
+      const i = dna.seite < 0 ? 0 : 1;
+      const si = i === 0 ? -1 : 1;   // 挥手那只手的屏幕侧向（0=左 1=右）
+      const f = holdSin(q * 2 / 2.2, .6);
+      const flick = 1 - Math.abs(f);
+      // 横向偏移必须乘 si：否则挥左手时手被推向画面右侧，横穿身体藏到头后
+      p.arm[i] = { ex: .45 * si, ey: -.9, hx: (.7 + .3 * f) * si, hy: -3.35 + .25 * Math.abs(f) };
+      p.arm[1 - i] = { ex: -.03, ey: .03, hx: -.06, hy: .04 };
+      p.lean = .05; p.dx = .03; p.dy = -.02 * flick;
+      p.kopfRoll = -.04 + f * .015;
+      return p;
+    },
+  },
+  // 走路：原地踏步——双膝交替抬、双臂对摆、身体每步两颠
+  walk: {
+    periode: 1.15,
+    pose(q) {
+      const p = neutralPose();
+      const w = q * TAU / 1.15;
+      for (let i = 0; i < 2; i++) {
+        const a = lift(q / 1.15 + i * .5);
+        p.bein[i] = { kx: (i ? 1 : -1) * .03 * a, ky: -.38 * a, fx: (i ? -1 : 1) * .08 * a, fy: -.55 * a };
+        p.arm[i] = { ex: 0, ey: -.18 * lift(q / 1.15 + (1 - i) * .5), hx: -.14 * Math.sin(w), hy: -.34 * lift(q / 1.15 + (1 - i) * .5) };
+      }
+      p.dy = -.035 * Math.abs(Math.sin(w));
+      p.dx = .03 * Math.sin(w);
+      p.lean = .03 * Math.sin(w);
+      return p;
+    },
+  },
+  // 跳跃：下蹲预备 → 腾空（全身起、腿收、臂举）→ 落地回弹
+  jump: {
+    periode: 1.7,
+    pose(q) {
+      const p = neutralPose();
+      const t = (((q / 1.7) % 1) + 1) % 1;
+      let crouch = 0, air = 0, land = 0;
+      if (t < .12) crouch = t / .12;
+      else if (t < .22) crouch = 1;
+      else if (t < .78) { air = Math.sin((t - .22) / .56 * Math.PI); crouch = Math.max(0, 1 - (t - .22) / .1); }
+      else land = Math.sin((t - .78) / .22 * Math.PI);
+      const hang = Math.pow(air, .55);
+      p.dy = crouch * .2 + land * .16 - hang * .85;
+      for (let i = 0; i < 2; i++) {
+        const s = i ? 1 : -1;
+        p.arm[i] = {
+          ex: s * (.1 * crouch + .15 * hang), ey: .26 * crouch - .5 * hang + .1 * land,
+          hx: s * (.14 * crouch + .3 * hang), hy: .38 * crouch - 1.5 * hang + .18 * land,
+        };
+        p.bein[i] = {
+          kx: s * (.06 * crouch + .1 * hang), ky: .14 * crouch - .35 * hang + .1 * land,
+          fx: s * (.07 * crouch - .05 * hang), fy: -.95 * hang,
+        };
+      }
+      return p;
+    },
+  },
+  // 跳舞：重心左右倒 + 双臂抬起晃 + 膝盖交替弯 + 头带一点 roll
+  dance: {
+    periode: 1.9,
+    pose(q) {
+      const p = neutralPose();
+      const hip = holdSin(q / 1.9, .38);
+      const bounce = Math.abs(Math.sin(q / 1.9 * TAU * 2));
+      const upL = Math.max(0, -hip), upR = Math.max(0, hip);
+      p.dx = hip * .12; p.lean = hip * .14; p.dy = -.04 * bounce;
+      p.kopfRoll = -hip * .07;
+      p.arm[0] = { ex: -.15, ey: -.3 - upL * .45, hx: -.3 + hip * .1, hy: -1.3 - upL * .7 - bounce * .12 };
+      p.arm[1] = { ex: .15, ey: -.3 - upR * .45, hx: .3 + hip * .1, hy: -1.3 - upR * .7 - bounce * .12 };
+      p.bein[0] = { kx: 0, ky: upL * .05, fx: 0, fy: -upR * .12 * bounce };
+      p.bein[1] = { kx: 0, ky: upR * .05, fx: 0, fy: -upL * .12 * bounce };
+      return p;
+    },
+  },
+};
+const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance'];
+
+/* ---------------- 骨架工具 ---------------- */
+
+// 绕点旋转（屏幕平面，y 向下）
+const rotUm = (p, c, ang) => {
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+  const dx = p.x - c.x, dy = p.y - c.y;
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+};
+// 沿三点链按各点半宽铺出肢体多边形（两边法线偏移）
+function gliedKette(pts, breiten) {
+  const n = pathNormals(pts);
+  const li = [], re = [];
+  pts.forEach((p, i) => {
+    li.push({ x: p.x + n[i].x * breiten[i], y: p.y + n[i].y * breiten[i] });
+    re.push({ x: p.x - n[i].x * breiten[i], y: p.y - n[i].y * breiten[i] });
+  });
+  return li.concat(re.reverse());
+}
+
+/* ---------------- 身体绘制 ---------------- */
+
+function drawBody(stift, dna, pal, hals, atem, pose) {
+  const k = dna.kopf, ko = dna.koerper;
+  const kopfH = k.ry * 1.9;
+  const bodyLen = ko.ratio * kopfH;
+  if (!pose) pose = neutralPose();
+  // 动作位移与倾斜
+  const mx = hals.mx + pose.dx;
+  const Y = (y) => y + atem * .008 + pose.dy;        // 呼吸 + 动作起伏
+  const schulterY = hals.untenY - .1;
+  const schulterSpitzeY = schulterY + bodyLen * .06;
+  const hipY = schulterY + bodyLen * .44;
+  const hemY = hipY + bodyLen * .1;
+  const fussY = schulterY + bodyLen;
+  const shw = k.rx * (ko.schulter === 'schmal' ? .82 : ko.schulter === 'breit' ? 1.14 : .98);
+  const tailleHW = shw * .9;
+  const saumHW = shw * .98 * ko.bauch;
+  const hipHW = shw * .86 * ko.bauch;
+  const linie = { w: .026, wackel: .005, farbe: pal.tinte };
+  const duenn = { w: .02, wackel: .004, farbe: pal.tinte };
+  const oberteil = ko.oberteil;
+  const kurzArm = oberteil === 'tshirt';
+  // 倾斜：肩处全量、髋处为 0
+  const L = (y) => pose.lean * clamp((hipY - y) / Math.max(.01, hipY - schulterY), 0, 1);
+  const T = (p) => ({ x: p.x + L(p.y), y: p.y });
+
+  // 卫衣：肩后先垫一个帽兜
+  if (oberteil === 'hoodie') {
+    const kapuze = [];
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI + (i / 12) * Math.PI;
+      kapuze.push(T({ x: mx + Math.cos(a) * shw * .78, y: Y(schulterY - .06) + Math.sin(a) * shw * .55 }));
+    }
+    kapuze.push(T({ x: mx + shw * .55, y: Y(schulterY + .3) }), T({ x: mx - shw * .55, y: Y(schulterY + .3) }));
+    stift.flaeche(kapuze, { farbe: pal.stoffTief, spur: 'kapuze', wackel: .005 });
+    stift.zug(kapuze, { spur: 'kapuze-rand', geschlossen: true, ...duenn, deckung: .8 });
+  }
+
+  // 手臂：肩-肘-腕三点链，动作偏移叠在默认关节上
+  const handY = Y(hipY + bodyLen * .18);
+  const armW = .13 * ko.armW;
+  const handFn = (hx, hy, s, ang = 0) => {
+    // 小手：一个竖椭圆 + 一道拇指短撇，随前臂方向转
+    const cos = Math.cos(ang), sin = Math.sin(ang);
+    const R = (dx, dy) => ({ x: hx + dx * cos - dy * sin, y: hy + dx * sin + dy * cos });
+    const hand = [];
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * 6.2832;
+      hand.push(R(Math.cos(a) * .07, .04 + Math.sin(a) * .095));
+    }
+    stift.flaeche(hand, { farbe: pal.haut, spur: `hand${s}`, wackel: .003, trocken: true });
+    stift.zug(hand, { spur: `hand-rand${s}`, geschlossen: true, ...duenn });
+    stift.zug([R(s * .05, 0), R(s * .1, .05)], { spur: `daumen${s}`, ...duenn, deckung: .8 });
+  };
+  for (const s of [-1, 1]) {
+    const i = s < 0 ? 0 : 1;
+    const ap = pose.arm[i];
+    const S = T({ x: mx + s * shw * .92, y: Y(schulterSpitzeY) });
+    const E0 = T({ x: mx + s * (shw + .08), y: Y(schulterY + (handY - schulterY) * .42) });
+    const W0 = T({ x: mx + s * (hipHW + .1), y: handY });
+    const E = { x: E0.x + ap.ex * 1, y: E0.y + ap.ey };
+    const W = { x: W0.x + ap.hx, y: W0.y + ap.hy };
+    const foreArmAng = Math.atan2(W.x - E.x, W.y - E.y);   // 前臂相对竖直的方向
+    if (kurzArm) {
+      // 短袖：皮肤臂沿链铺满，袖管压在上臂段，袖口是向下鼓的包绕弧
+      const arm = gliedKette([S, E, W], [armW * 1.15, armW, armW * .7]);
+      stift.flaeche(arm, { farbe: pal.haut, spur: `arm${s}`, wackel: .004, trocken: true });
+      stift.zug(arm, { spur: `arm-rand${s}`, geschlossen: true, ...duenn });
+      const mitte = { x: (S.x + E.x) / 2, y: (S.y + E.y) / 2 };
+      const armel = gliedKette([S, mitte, E], [armW * 1.35, armW * 1.2, armW * 1.05]);
+      stift.flaeche(armel, { farbe: pal.stoff, spur: `armel${s}`, wackel: .004 });
+      stift.zug(armel, { spur: `armel-rand${s}`, geschlossen: true, ...duenn });
+      // 袖口包绕线（沿链方向向下鼓）
+      const nE = pathNormals([mitte, E])[1];
+      const dirE = { x: E.x - mitte.x, y: E.y - mitte.y };
+      const dl = Math.hypot(dirE.x, dirE.y) || 1;
+      stift.zug([
+        { x: E.x + nE.x * armW * 1.05, y: E.y + nE.y * armW * 1.05 },
+        { x: E.x + dirE.x / dl * .06, y: E.y + dirE.y / dl * .06 },
+        { x: E.x - nE.x * armW * 1.05, y: E.y - nE.y * armW * 1.05 },
+      ], { spur: `manschette${s}`, ...duenn });
+      handFn(W.x, W.y, s, -foreArmAng * .8);
+    } else {
+      // 长袖：袖管沿链直包到腕上，袖口一道收线，只露出手
+      const arm = gliedKette([S, E, W], [armW * 1.25, armW * 1.05, armW * .8]);
+      stift.flaeche(arm, { farbe: pal.stoff, spur: `arm${s}`, wackel: .004 });
+      stift.zug(arm, { spur: `arm-rand${s}`, geschlossen: true, ...duenn });
+      const nW = pathNormals([E, W])[1];
+      stift.zug([
+        { x: W.x + nW.x * armW * .8, y: W.y + nW.y * armW * .8 },
+        { x: W.x - nW.x * armW * .8, y: W.y - nW.y * armW * .8 },
+      ], { spur: `manschette${s}`, ...duenn, deckung: .7 });
+      handFn(W.x, W.y, s, -foreArmAng * .8);
+    }
+  }
+
+  // 腿：髋-膝-踝三点链
+  const beinHW = Math.max(.12, hipHW * .5);
+  const fussX = beinHW * .8;
+  const beinKette = [];
+  for (const s of [-1, 1]) {
+    const i = s < 0 ? 0 : 1;
+    const bp = pose.bein[i];
+    const H = { x: mx + s * beinHW * .68, y: Y(hipY + .1) };
+    const K = { x: mx + s * beinHW * .8 + bp.kx, y: Y(hipY + (fussY - hipY) * .45) + bp.ky };
+    const A = { x: mx + s * fussX + bp.fx, y: Y(fussY - .18) + bp.fy };
+    beinKette.push({ s, i, H, K, A, bp });
+  }
+  if (ko.hose === 'rock') {
+    const rockSaumY = Y(hipY + bodyLen * .26);
+    const rock = [
+      { x: mx - tailleHW * .92, y: Y(hipY + .06) },
+      { x: mx - hipHW * 1.28 - pose.lean * .3, y: rockSaumY },
+      { x: mx, y: rockSaumY + .05 },
+      { x: mx + hipHW * 1.28 - pose.lean * .3, y: rockSaumY },
+      { x: mx + tailleHW * .92, y: Y(hipY + .06) },
+    ];
+    stift.flaeche(rock, { farbe: pal.stoffTief, spur: 'rock', wackel: .005 });
+    stift.zug(rock, { spur: 'rock-rand', geschlossen: true, ...linie });
+    for (const { s, K, A } of beinKette) {
+      const wade = gliedKette([K, A], [beinHW * .4, beinHW * .3]);
+      stift.flaeche(wade, { farbe: pal.haut, spur: `wade${s}`, wackel: .004, trocken: true });
+      stift.zug(wade, { spur: `wade-rand${s}`, geschlossen: true, ...duenn });
+    }
+  } else {
+    // 胯部桥（裤腰，被上衣下摆盖住）+ 两条沿链的裤管
+    const bruecke = [
+      { x: mx - hipHW, y: Y(hipY + .04) },
+      { x: mx - beinHW * 1.1, y: Y(hipY + bodyLen * .15) },
+      { x: mx - .02, y: Y(hipY + bodyLen * .12) },
+      { x: mx + beinHW * 1.1, y: Y(hipY + bodyLen * .15) },
+      { x: mx + hipHW, y: Y(hipY + .04) },
+    ];
+    stift.flaeche(bruecke, { farbe: pal.hose, spur: 'hose', wackel: .005 });
+    stift.zug(bruecke, { spur: 'hose-rand', geschlossen: true, ...linie });
+    for (const { s, H, K, A } of beinKette) {
+      const bein = gliedKette([H, K, A], [beinHW * .85, beinHW * .68, beinHW * .5]);
+      stift.flaeche(bein, { farbe: pal.hose, spur: `bein${s}`, wackel: .005 });
+      stift.zug(bein, { spur: `bein-rand${s}`, geschlossen: true, ...linie });
+      // 裤脚收口
+      const nA = pathNormals([K, A])[1];
+      stift.zug([
+        { x: A.x + nA.x * beinHW * .5, y: A.y + nA.y * beinHW * .5 },
+        { x: A.x - nA.x * beinHW * .5, y: A.y - nA.y * beinHW * .5 },
+      ], { spur: `hosenbein${s}`, ...duenn, deckung: .7 });
+    }
+    // 裆部一道短竖线，两腿分叉
+    stift.zug([{ x: mx, y: Y(hipY + bodyLen * .1) }, { x: mx, y: Y(hipY + bodyLen * .2) }], { spur: 'schritt', ...duenn, deckung: .55 });
+  }
+
+  // 鞋：钉在踝点上，随小腿方向转
+  for (const { s, K, A } of beinKette) {
+    const shinAng = Math.atan2(A.x - K.x, A.y - K.y);
+    const fx = A.x, fy = A.y + .18;
+    const R = (dx, dy) => rotUm({ x: fx + dx, y: fy + dy }, { x: fx, y: fy - .18 }, -shinAng * .8);
+    let schuh;
+    if (ko.schuhe === 'stiefel') {
+      schuh = [
+        R(-s * .13, -.36), R(s * .1, -.36), R(s * .11, -.14),
+        R(s * .25, -.1), R(s * .26, -.01), R(-s * .14, -.01),
+      ];
+    } else if (ko.schuhe === 'rund') {
+      schuh = [
+        R(-s * .14, -.16), R(-s * .15, -.02), R(s * .26, -.01),
+        R(s * .27, -.08), R(s * .12, -.13), R(-s * .02, -.14),
+      ];
+    } else {
+      schuh = [
+        R(-s * .13, -.14), R(-s * .14, -.02), R(s * .3, -.02),
+        R(s * .3, -.09), R(s * .1, -.12), R(-s * .02, -.13),
+      ];
+    }
+    stift.flaeche(schuh, { farbe: pal.schuh, spur: `schuh${s}`, wackel: .004 });
+    stift.zug(schuh, { spur: `schuh-rand${s}`, geschlossen: true, ...duenn });
+    const sohle = schuh.filter((p) => p.y > fy - .05);
+    if (sohle.length >= 2) stift.zug(sohle, { spur: `sohle${s}`, w: .018, wackel: .003, farbe: pal.tinte, deckung: .8 });
+  }
+
+  // 衣身：斜肩（脖根外侧斜向下到肩点）→ 两侧直筒微收 → 下摆盖过裤腰
+  const torso = [
+    T({ x: mx - hals.halb * .85, y: Y(schulterY - .04) }),
+    T({ x: mx - shw * .7, y: Y(schulterY + (schulterSpitzeY - schulterY) * .5) }),
+    T({ x: mx - shw, y: Y(schulterSpitzeY) }),
+    T({ x: mx - tailleHW, y: Y(schulterY + bodyLen * .28) }),
+    T({ x: mx - saumHW, y: Y(hemY) }),
+    T({ x: mx, y: Y(hemY) + .04 }),
+    T({ x: mx + saumHW, y: Y(hemY) }),
+    T({ x: mx + tailleHW, y: Y(schulterY + bodyLen * .28) }),
+    T({ x: mx + shw, y: Y(schulterSpitzeY) }),
+    T({ x: mx + shw * .7, y: Y(schulterY + (schulterSpitzeY - schulterY) * .5) }),
+    T({ x: mx + hals.halb * .85, y: Y(schulterY - .04) }),
+  ];
+  stift.flaeche(torso, { farbe: pal.stoff, spur: 'rumpf', wackel: .005 });
+  stift.zug(torso, { spur: 'rumpf-rand', geschlossen: true, ...linie });
+  // 上衣下摆一道明确横线（轻微波浪）
+  stift.zug([
+    T({ x: mx - saumHW * .96, y: Y(hemY - .01) }),
+    T({ x: mx, y: Y(hemY) + .05 }),
+    T({ x: mx + saumHW * .96, y: Y(hemY - .01) }),
+  ], { spur: 'saum', ...duenn, deckung: .75 });
+
+  // 领口结构与细节：先有领形，再谈扣子抽绳
+  if (oberteil === 'tshirt') {
+    stift.zug(bogen((e, n) => T({ x: mx + e, y: Y(schulterY - .02) + n }),
+      -hals.halb * .9, 0, hals.halb * 1.8, Math.PI * 1.12, Math.PI * 1.88, 8),
+      { spur: 'rundhals', ...duenn, deckung: .8 });
+  } else if (oberteil === 'hemd') {
+    for (const s of [-1, 1]) {
+      const kragen = [
+        T({ x: mx + s * hals.halb * .8, y: Y(schulterY - .05) }),
+        T({ x: mx + s * hals.halb * 1.5, y: Y(schulterY + .12) }),
+        T({ x: mx + s * hals.halb * .3, y: Y(schulterY + .18) }),
+      ];
+      stift.flaeche(kragen, { farbe: pal.stoff, spur: `hemdkragen${s}`, wackel: .003, trocken: true });
+      stift.zug(kragen, { spur: `hemdkragen-rand${s}`, geschlossen: true, ...duenn });
+    }
+    stift.zug([T({ x: mx, y: Y(schulterY + .18) }), T({ x: mx, y: Y(hemY - .06) })], { spur: 'leiste', ...duenn, deckung: .65 });
+    for (let i = 0; i < 3; i++) {
+      stift.punkt(T({ x: mx, y: Y(schulterY + bodyLen * (.16 + i * .1)) }), .022, pal.tinte, { deckung: .8, spur: `knopf${i}` });
+    }
+  } else if (oberteil === 'hoodie') {
+    stift.zug(bogen((e, n) => T({ x: mx + e, y: Y(schulterY - .01) + n }),
+      -hals.halb * .95, 0, hals.halb * 1.9, Math.PI * 1.1, Math.PI * 1.9, 8),
+      { spur: 'hoodiehals', ...duenn, deckung: .8 });
+    stift.zug([T({ x: mx - hals.halb * .3, y: Y(schulterY + .08) }), T({ x: mx - hals.halb * .36, y: Y(schulterY + .26) })], { spur: 'kordel-l', ...duenn, deckung: .7 });
+    stift.zug([T({ x: mx + hals.halb * .3, y: Y(schulterY + .08) }), T({ x: mx + hals.halb * .36, y: Y(schulterY + .26) })], { spur: 'kordel-r', ...duenn, deckung: .7 });
+    const bauchY = Y(schulterY + bodyLen * .32);
+    const tasche = [
+      T({ x: mx - tailleHW * .55, y: bauchY - .13 }),
+      T({ x: mx + tailleHW * .55, y: bauchY - .13 }),
+      T({ x: mx + tailleHW * .42, y: bauchY + .17 }),
+      T({ x: mx - tailleHW * .42, y: bauchY + .17 }),
+    ];
+    stift.zug(tasche, { spur: 'tasche', geschlossen: true, ...duenn, deckung: .65 });
+  } else {
+    // 开衫：V 领（领口起在脖根外侧的衣身上，露出里面一小片皮肤）+ 扣子 + 罗纹下摆
+    const vSpitze = Y(schulterY + bodyLen * .22);
+    stift.flaeche([
+      T({ x: mx - hals.halb * 1.25, y: Y(schulterY - .02) }),
+      T({ x: mx + hals.halb * 1.25, y: Y(schulterY - .02) }),
+      T({ x: mx, y: vSpitze }),
+    ], { farbe: pal.haut, spur: 'vausschnitt', wackel: .003, trocken: true });
+    stift.zug([T({ x: mx - hals.halb * 1.25, y: Y(schulterY - .02) }), T({ x: mx, y: vSpitze })], { spur: 'cardigan-l', ...duenn });
+    stift.zug([T({ x: mx + hals.halb * 1.25, y: Y(schulterY - .02) }), T({ x: mx, y: vSpitze })], { spur: 'cardigan-r', ...duenn });
+    for (let i = 0; i < 3; i++) {
+      stift.punkt(T({ x: mx, y: vSpitze + .1 + i * .16 }), .022, pal.tinte, { deckung: .8, spur: `knopf${i}` });
+    }
+    for (let i = -2; i <= 2; i++) {
+      stift.zug([T({ x: mx + i * tailleHW * .3, y: Y(hemY - .13) }), T({ x: mx + i * tailleHW * .3, y: Y(hemY - .04) })], { spur: `rippe${i}`, ...duenn, deckung: .5 });
+    }
+  }
+}
 /* ================= 组装一颗头 ================= */
 
 function headCache(head) {
@@ -2212,6 +2690,8 @@ function drawHead(ctx, head, t) {
   const cache = headCache(head);
   const pal = cache.palette;
   const z = head.zustand(t);
+  const koerperPose = head.motionPose(t);
+  z.pose.roll += koerperPose.kopfRoll;   // 跳舞时头带一点侧倾
   const pose = z.pose;
   const m = rotMatrix(pose);
   const ctx3d = { kopf: dna.kopf, pose, m, refU: cache.ref.refU, refV: cache.ref.refV, dna };
@@ -2219,21 +2699,30 @@ function drawHead(ctx, head, t) {
   const umriss = silhouettesAusWolke(cache.schaedel, m, { bins: 108 });
   if (umriss.length < 8) return;
   const tick = Math.floor(z.zeit * 8 + dna.taktVersatz);
-  const stift = makeStift(ctx, dna.seed, pal.tinte, stiftSkala(mass), tick);
+  // 笔按 tick 复用：同一 tick 内（60 帧里的 7 帧）不重建噪声表
+  if (cache.stiftTick !== tick || cache.stiftMass !== mass) {
+    cache.stift = makeStift(ctx, dna.seed, pal.tinte, stiftSkala(mass), tick);
+    cache.stiftTick = tick;
+    cache.stiftMass = mass;
+  }
+  const stift = cache.stift;
   const groessen = messeGroessen(ctx3d, dna.layout);
   const haarInfo = { schale: cache.schale, kappe: cache.kappe, afro: cache.afro, dutt: cache.dutt };
   const mk = dna.merkmale;
   const anim = { blickX: z.blickX, blickY: z.blickY, lider: z.lider, wach: z.wach, zeit: z.zeit, x: z.blickX, y: z.blickY };
 
   ctx.save();
-  ctx.translate(head.cx, head.cy - z.wach * .05 * mass);
+  // 头随身体位移（走路/跳跃时全身一起动，脖子衔接不断）
+  ctx.translate(head.cx + koerperPose.dx * mass, head.cy - z.wach * .05 * mass + koerperPose.dy * mass);
   ctx.scale(mass, mass);
 
-  // 1. 脖子与衣领
-  drawNeck(stift, dna, ctx3d, umriss, mk.kragen, pal);
+  // 1. 脖子（先画，身体会从下面盖住脖子根；单人模式服装有自己的领口，头的衣领关闭）
+  const hals = drawNeck(stift, dna, ctx3d, umriss, WAND ? mk.kragen : 'keiner', pal);
   // 2. 后发 / 帽子后部 / 耳机后梁
   drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal);
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
+  // 2.5 身体：骨架链 + 动作姿态（一墙脸模式没有身体）
+  if (!WAND) drawBody(stift, dna, pal, hals, Math.sin(t * head.atemTempo + head.atemPhase), koerperPose);
   // 3. 耳朵（朝向我们的那只后画）
   const ohrL = feldAn(-1.48, dna.layout.ohrV, ctx3d);
   const ohrR = feldAn(1.48, dna.layout.ohrV, ctx3d);
@@ -2270,7 +2759,7 @@ function drawHead(ctx, head, t) {
   });
   const nah = augeFelder[1].feld.z >= augeFelder[0].feld.z ? 1 : -1;
   const wangenAktiv = mk.zeichen === 'wangenbogen';
-  // 层序与原作一致：远眼 → 鼻 → 近眼 → 嘴
+  // 层序：远眼 → 鼻 → 近眼 → 嘴
   const fernEintrag = augeFelder.find((e) => e.seite !== nah);
   const nahEintrag = augeFelder.find((e) => e.seite === nah);
   zeichneAugeKomplett(fernEintrag.seite, fernEintrag.feld, fernEintrag.u);
@@ -2297,23 +2786,38 @@ function drawHead(ctx, head, t) {
 
   ctx.restore();
 
-  // 名字：浅灰、等宽、拉开字距
-  ctx.save();
-  ctx.font = `10px ui-monospace, "SF Mono", Menlo, "Courier New", monospace`;
-  try { ctx.letterSpacing = '3px'; } catch (e) { /* 旧浏览器忽略 */ }
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#8b8894';
-  ctx.fillText(dna.name, head.cx, head.cy + mass * 1.62);
-  ctx.restore();
+  // 名字：楷体、浅灰墨（单人落在脚下，一墙脸/合影/一群人在脚下小字；zeigeName 可整体关掉）
+  if (head.zeigeName !== false) {
+    ctx.save();
+    ctx.font = (WAND || FOTO || CROWD)
+      ? `13px "Kaiti", "STKaiti", "楷体", serif`
+      : `${Math.round(clamp(mass * .26, 18, 34))}px "Kaiti", "STKaiti", "楷体", serif`;
+    try { ctx.letterSpacing = '2px'; } catch (e) { /* 旧浏览器忽略 */ }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8b8894';
+    ctx.fillText(dna.name, head.cx, head.nameY ?? (head.cy + mass * 1.62));
+    ctx.restore();
+  }
 }
 
-/* ================= Blatt：纸面、排版与主循环 ================= */
+/* ================= 纸面：排版与主循环 ================= */
+
+// 模式：缺省单人展示；<body data-modus="wand"> 为一墙脸；
+// <body data-modus="foto"> / <body data-modus="crowd"> 为合影小游戏 / 一群朋友，
+// 引擎只提供全局词法作用域里的 Head/drawHead/drawBody/makeDNA/Stift/调色板等，
+// 不启动自己的排版与主循环，由后加载的 photo.js / crowd.js 驱动
+// （经典 script 共享全局词法作用域）。
+const MODUS = typeof document !== 'undefined' ? document.body?.dataset?.modus : undefined;
+const WAND = MODUS === 'wand';
+const FOTO = MODUS === 'foto';
+const CROWD = MODUS === 'crowd';
 
 const canvas = document.getElementById('blatt');
 const ctx = canvas.getContext('2d');
 let heads = [];
 let dpr = 1;
+let vergroessert = -1;   // 一墙脸模式：点一颗头放大居中（-1 = 整墙）
 let baseSeed = 1000;
 
 /* 纸纹：128px 的噪点 + 短划痕砖，平铺出纸面颗粒 */
@@ -2391,22 +2895,52 @@ function layout() {
   canvas.style.width = innerWidth + 'px';
   canvas.style.height = innerHeight + 'px';
 
-  // 大而稀的网格：格子接近方形，头之间留足呼吸感
-  const cols = Math.max(2, Math.min(5, Math.round(innerWidth / 320)));
-  const rows = Math.max(1, Math.min(3, Math.round(innerHeight / 400)));
-  const count = cols * rows;
-  while (heads.length < count) heads.push(new Head(baseSeed + heads.length));
-  heads.length = count;
-  const gw = innerWidth / cols, gh = innerHeight / rows;
-  for (let i = 0; i < count; i++) {
-    const head = heads[i];
-    headCache(head);   // 确保 afro/帽子参数可用于占位计算
-    const c = i % cols, r = Math.floor(i / cols);
-    const bedarf = raumBedarf(head);
-    head.mass = Math.min(gw / (2 * bedarf.seite * 1.06), gh / (bedarf.oben + 2.1));
-    head.cx = gw * (c + .5);
-    head.cy = gh * r + head.mass * bedarf.oben + gh * .08;
+  if (WAND) {
+    // 放大视图：一颗头居中放大，其余暂时收起
+    if (vergroessert >= 0 && heads[vergroessert]) {
+      const head = heads[vergroessert];
+      headCache(head);
+      const bedarf = raumBedarf(head);
+      head.mass = Math.min(innerWidth / (2 * bedarf.seite * 1.2), innerHeight / (bedarf.oben + 2.4));
+      head.cx = innerWidth / 2;
+      head.cy = innerHeight * .1 + bedarf.oben * head.mass;
+      head.nameY = head.cy + head.mass * 1.62;
+      return;
+    }
+    // 一墙脸：大而稀的网格，每格一颗头，名字在头下
+    const cols = Math.max(2, Math.min(4, Math.round(innerWidth / 360)));
+    const rows = Math.max(1, Math.min(3, Math.round(innerHeight / 400)));
+    const count = cols * rows;
+    while (heads.length < count) heads.push(new Head(baseSeed + heads.length));
+    heads.length = count;
+    const gw = innerWidth / cols, gh = innerHeight / rows;
+    for (let i = 0; i < count; i++) {
+      const head = heads[i];
+      headCache(head);   // 确保 afro/帽子参数可用于占位计算
+      const c = i % cols, r = Math.floor(i / cols);
+      const bedarf = raumBedarf(head);
+      head.mass = Math.min(gw / (2 * bedarf.seite * 1.06), gh / (bedarf.oben + 2.1));
+      head.cx = gw * (c + .5);
+      head.cy = gh * r + head.mass * bedarf.oben + gh * .08;
+      head.nameY = head.cy + head.mass * 1.62;
+    }
+    return;
   }
+
+  // 单人展示：居中偏上，全身占页面高度的 75~85%
+  if (!heads.length) heads.push(new Head(baseSeed));
+  const head = heads[0];
+  headCache(head);   // 确保 afro/帽子参数可用于占位计算
+  const dna = head.dna;
+  const bedarf = raumBedarf(head);
+  const kopfH = dna.kopf.ry * 1.9;
+  const bodyLen = dna.koerper.ratio * kopfH;
+  const fussW = dna.kopf.ry + .16 + bodyLen;          // 头心到脚底（世界单位）
+  const span = bedarf.oben + fussW + .55;             // 头顶留边 + 全身 + 名字
+  head.mass = Math.min(innerHeight * .8 / span, innerWidth * .45 / (2 * bedarf.seite));
+  head.cx = innerWidth / 2;
+  head.cy = innerHeight * .07 + bedarf.oben * head.mass;
+  head.nameY = head.cy + (fussW + .45) * head.mass;
 }
 
 function reshuffle() {
@@ -2422,23 +2956,60 @@ addEventListener('pointermove', (e) => {
 addEventListener('pointerleave', () => { pointer.active = false; });
 document.addEventListener('mouseleave', () => { pointer.active = false; });
 addEventListener('blur', () => { pointer.active = false; });
-addEventListener('resize', layout);
-document.getElementById('neues').addEventListener('click', reshuffle);
 
-layout();
+if (!FOTO && !CROWD) {
+  addEventListener('resize', layout);
+  document.getElementById('neues')?.addEventListener('click', reshuffle);
+  // 一墙脸：点一颗头放大居中，再点（任意处）回到整墙
+  if (WAND) canvas.addEventListener('click', (e) => {
+    if (vergroessert >= 0) { vergroessert = -1; layout(); return; }
+    let best = -1, bestD = 1e9;
+    heads.forEach((h, i) => {
+      const d = Math.hypot(e.clientX - h.cx, e.clientY - h.cy) / h.mass;
+      if (d < 1.3 && d < bestD) { bestD = d; best = i; }
+    });
+    if (best >= 0) { vergroessert = best; layout(); }
+  });
+}
+
+// 动作按钮与键盘 1-5（只单人模式有）
+function syncAktionsUI(name) {
+  document.querySelectorAll('.ak').forEach((b) => b.classList.toggle('aktiv', b.dataset.ak === name));
+}
+function waehleAktion(name) {
+  if (!heads.length) return;
+  heads[0].setAktion(name, performance.now() / 1000, 0);
+}
+document.querySelectorAll('.ak').forEach((b) => b.addEventListener('click', () => waehleAktion(b.dataset.ak)));
+if (!WAND && !FOTO && !CROWD) addEventListener('keydown', (e) => {
+  const i = '12345'.indexOf(e.key);
+  if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
+});
+
+// foto / crowd 模式到这里为止：纸纹与 papier() 留用，排版与主循环交给 photo.js / crowd.js
+if (FOTO || CROWD) {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  makeGrain();
+} else {
+  layout();
+}
 
 let prev = performance.now();
 function frame(now) {
   const dt = Math.min((now - prev) / 1000, 0.05);
   prev = now;
-  const t = now / 1000;
+  // __freezeT 是调试钩子：固定时间戳用来截指定相位
+  const t = (typeof window !== 'undefined' && window.__freezeT != null) ? window.__freezeT : now / 1000;
 
   papier();
-  for (const head of heads) {
+  const zuZeichnen = (WAND && vergroessert >= 0) ? [heads[vergroessert]] : heads;
+  for (const head of zuZeichnen) {
     head.update(dt, t, pointer);
     drawHead(ctx, head, t);
   }
   requestAnimationFrame(frame);
 }
-makeGrain();
-requestAnimationFrame(frame);
+if (!FOTO && !CROWD) {
+  makeGrain();
+  requestAnimationFrame(frame);
+}

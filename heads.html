@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>纸上的小人</title>
+<title>纸上的小人 · 一墙脸</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
   canvas { display: block; cursor: crosshair; }
@@ -17,6 +17,13 @@
     display: inline-block; transform: rotate(1.4deg);
   }
   #titel mark:last-of-type { transform: rotate(-1.1deg); }
+  .sprung {
+    position: fixed; top: 30px; right: 34px; text-align: right;
+    font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px;
+    user-select: none;
+  }
+  .sprung a { color: #a89f93; text-decoration: none; display: block; }
+  .sprung a:hover { color: #2b2320; }
   #leiste {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
     display: flex; gap: 8px; align-items: center;
@@ -27,31 +34,18 @@
     padding: 9px 18px 8px 21px; cursor: pointer; user-select: none;
   }
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
-  #leiste button.aktiv { color: #f6f2ea; background: #2e2839; border-color: #2e2839; }
-  .sprung {
-    position: fixed; top: 30px; right: 34px; text-align: right;
-    font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px;
-    user-select: none;
-  }
-  .sprung a { color: #a89f93; text-decoration: none; display: block; }
-  .sprung a:hover { color: #2b2320; }
 </style>
 </head>
-<body>
+<body data-modus="wand">
 <canvas id="blatt"></canvas>
 <div id="titel">我的 <mark>朋友们</mark> 都是 <mark>javascript</mark> 画的</div>
 <div class="sprung">
+  <a href="index.html">看看一个人 →</a>
   <a href="crowd.html">来一群朋友 →</a>
-  <a href="heads.html">看看一墙脸 →</a>
   <a href="photo.html">拍合影 →</a>
 </div>
 <div id="leiste">
-  <button class="ak aktiv" data-ak="stand">站 立</button>
-  <button class="ak" data-ak="wave">挥 手</button>
-  <button class="ak" data-ak="walk">走 路</button>
-  <button class="ak" data-ak="jump">跳 跃</button>
-  <button class="ak" data-ak="dance">跳 舞</button>
-  <button id="neues">换 一 个</button>
+  <button id="neues">换 一 版</button>
 </div>
 <script src="app.js"></script>
 </body>

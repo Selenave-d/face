@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纸上的小人 · 一群朋友</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
+  canvas { display: block; }
+  #titel {
+    position: fixed; top: 30px; left: 34px; transform: rotate(-2.5deg);
+    font: 19px/1.9 "Courier New", ui-monospace, monospace; color: #3a3440;
+    user-select: none; pointer-events: none; white-space: nowrap;
+  }
+  #titel mark {
+    background: #2e2839; color: #f6f2ea; padding: 2px 9px;
+    display: inline-block; transform: rotate(1.4deg);
+  }
+  #titel mark:last-of-type { transform: rotate(-1.1deg); }
+  #zaehler {
+    position: fixed; top: 76px; left: 36px; transform: rotate(-2.5deg);
+    font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px; color: #a89f93;
+    user-select: none; pointer-events: none;
+  }
+  .sprung {
+    position: fixed; top: 30px; right: 34px; text-align: right;
+    font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px;
+    user-select: none;
+  }
+  .sprung a { color: #a89f93; text-decoration: none; display: block; }
+  .sprung a:hover { color: #2b2320; }
+  #schieber {
+    position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%);
+    width: min(560px, calc(100vw - 56px)); height: 52px;
+    cursor: ew-resize; outline: none;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  #schieber:focus-visible {
+    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 14px;
+  }
+  #andere {
+    position: fixed; right: 34px; bottom: 48px;
+    font: 12px/1 "Courier New", monospace; letter-spacing: 3px; color: #7a7268;
+    background: transparent; border: 1px solid #c9c1b5; border-radius: 999px;
+    padding: 9px 18px 8px 21px; cursor: pointer; user-select: none;
+  }
+  #andere:hover { color: #2b2320; border-color: #2b2320; }
+  @media (max-width: 759px) { #andere { display: none; } }
+</style>
+</head>
+<body data-modus="crowd">
+<canvas id="blatt"></canvas>
+<div id="titel">我的 <mark id="zahl">1</mark> 个 <mark>朋友</mark> 都是 <mark>javascript</mark> 画的</div>
+<div id="zaehler">1 / 500</div>
+<div class="sprung">
+  <a href="index.html">看看一个人 →</a>
+  <a href="heads.html">看看一墙脸 →</a>
+  <a href="photo.html">拍合影 →</a>
+</div>
+<div id="schieber" role="slider" tabindex="0" aria-label="朋友人数"
+     aria-valuemin="1" aria-valuemax="500" aria-valuenow="1" aria-valuetext="1 个朋友"></div>
+<button id="andere">换 一 群</button>
+<script src="app.js"></script>
+<script src="crowd.js"></script>
+</body>
+</html>
