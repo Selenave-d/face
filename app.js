@@ -915,7 +915,8 @@ function drawEye(stift, feld, size, kind, seite, anim, pupille, pal, spur, stern
       stift.zug([P(-.6, 0), P(0, .06), P(.6, 0)], { spur, ...basis });
       break;
     case 'zwinker':
-      if (seite < 0) {
+      // 眯哪只眼跟人的惯用侧走（和创可贴/挥手/脸颊弧同一侧），不再恒眨左眼
+      if (seite === anim.zwinkerSeite) {
         stift.zug(bogen(P, 0, .16, .6, Math.PI * 1.1, Math.PI * 1.9), { spur, ...basis, w: LID_BREITE * 1.1 });
       } else {
         const r = d * .4 * m * S, c = blickPkt(.1, 0);
@@ -2183,7 +2184,7 @@ function drawEar(stift, feld, pal, seite, umriss) {
   stift.zug(innen, { spur: `ohrin${seite}`, w: .014, wackel: .003, farbe: pal.tinte, deckung: .55, einlagig: true });
 }
 
-function drawNeck(stift, dna, ctx3d, umriss, kragen, pal) {
+function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false) {
   const k = dna.kopf, l = k.ry;
   let tiefste = -1e9;
   for (const p of umriss) if (p.y > tiefste) tiefste = p.y;
@@ -2198,6 +2199,23 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal) {
   const obenY = tiefste - l * .12;
   const untenY = Math.max(yB, tiefste + l * .08);
   const a = { x: mx - halb - .01, y: untenY }, b = { x: mx + halb + .01, y: untenY };
+  // 一墙脸：脖子下先垫一段肩（胸像裁切），脖子、领口随后画在肩上
+  if (schulterStueck) {
+    const ko = dna.koerper;
+    const shw = k.rx * (ko.schulter === 'schmal' ? .82 : ko.schulter === 'breit' ? 1.14 : .98);
+    const y0 = untenY - .06, y1 = untenY + .2 * l;
+    const pts = [
+      { x: mx - halb * .85, y: y0 },
+      { x: mx - shw * .72, y: (y0 + y1) / 2 },
+      { x: mx - shw * .6, y: y1 },
+      { x: mx, y: y1 + .05 },
+      { x: mx + shw * .6, y: y1 },
+      { x: mx + shw * .72, y: (y0 + y1) / 2 },
+      { x: mx + halb * .85, y: y0 },
+    ];
+    stift.flaeche(pts, { farbe: pal.stoff, spur: 'schulter', wackel: .004 });
+    stift.zug(pts, { spur: 'schulter-rand', geschlossen: true, w: .026, wackel: .005, farbe: pal.tinte });
+  }
   stift.flaeche([{ x: mx - halb, y: obenY }, { x: mx + halb, y: obenY }, b, a], { farbe: pal.haut, eckig: true, trocken: true });
   const linienOben = tiefste - l * .05;
   stift.zug([{ x: mx - halb, y: linienOben }, a], { spur: 'hals-l', w: .022, wackel: .004, farbe: pal.tinte });
@@ -2709,7 +2727,7 @@ function drawHead(ctx, head, t) {
   const groessen = messeGroessen(ctx3d, dna.layout);
   const haarInfo = { schale: cache.schale, kappe: cache.kappe, afro: cache.afro, dutt: cache.dutt };
   const mk = dna.merkmale;
-  const anim = { blickX: z.blickX, blickY: z.blickY, lider: z.lider, wach: z.wach, zeit: z.zeit, x: z.blickX, y: z.blickY };
+  const anim = { blickX: z.blickX, blickY: z.blickY, lider: z.lider, wach: z.wach, zeit: z.zeit, x: z.blickX, y: z.blickY, zwinkerSeite: dna.seite };
 
   ctx.save();
   // 头随身体位移（走路/跳跃时全身一起动，脖子衔接不断）
@@ -2717,7 +2735,7 @@ function drawHead(ctx, head, t) {
   ctx.scale(mass, mass);
 
   // 1. 脖子（先画，身体会从下面盖住脖子根；单人模式服装有自己的领口，头的衣领关闭）
-  const hals = drawNeck(stift, dna, ctx3d, umriss, WAND ? mk.kragen : 'keiner', pal);
+  const hals = drawNeck(stift, dna, ctx3d, umriss, WAND ? mk.kragen : 'keiner', pal, WAND);
   // 2. 后发 / 帽子后部 / 耳机后梁
   drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal);
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
@@ -2775,14 +2793,15 @@ function drawHead(ctx, head, t) {
     const braueFeld = feldAn(u, dna.layout.braueV, ctx3d);
     drawBrow(stift, braueFeld, size * 1.2, mk.braue, seite, z.wach, pal, `braue${seite}`);
   }
-  // 12. 头发与前侧覆盖物
-  drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
-  drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
-  // 13. 小装饰与眼镜
-  drawZierrat(stift, ctx3d, dna, kopfh && mk.zierrat === 'ohrring' ? 'keiner' : mk.zierrat, ohren, dna.seite, pal);
+  // 12. 眼镜（在头发/帽子之前：镜圈上缘与镜腿根被刘海和帽檐自然盖住）
   if (mk.brille !== 'keine') {
     drawGlasses(stift, ctx3d, null, null, groessen.auge, mk.brille, pal, dna.kopf, dna.layout);
   }
+  // 13. 头发与前侧覆盖物
+  drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
+  drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
+  // 14. 小装饰（耳环/创可贴贴在最上层）
+  drawZierrat(stift, ctx3d, dna, kopfh && mk.zierrat === 'ohrring' ? 'keiner' : mk.zierrat, ohren, dna.seite, pal);
 
   ctx.restore();
 
