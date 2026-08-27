@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f6f3ed">
 <title>纸上的小人 · 班级合影</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
@@ -36,8 +37,7 @@
   .filter button:hover { color: #2b2320; }
   .filter button.an { color: #2e2839; border-bottom: 1px solid #2e2839; }
   #filterArt { top: 92px; }
-  #filterMedia { top: 116px; }
-  #leiste {
+  #filterMedia { top: 116px; }  #leiste {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
     display: flex; gap: 8px; align-items: center;
   }
@@ -49,6 +49,20 @@
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
   #leiste button:disabled { opacity: .45; cursor: default; }
   #leiste button:disabled:hover { color: #7a7268; border-color: #c9c1b5; }
+  /* 手机端：标题换行、导航与过滤器收紧、按钮条折行、去双击缩放 */
+  @media (max-width: 719px) {
+    body { overscroll-behavior: none; }
+    button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    #titel { font-size: 13px; line-height: 1.7; top: 16px; left: 16px; max-width: 54vw; white-space: normal; }
+    .sprung { top: 16px; right: 16px; font-size: 11px; letter-spacing: 1px; }
+    .sprung a { padding: 3px 0; }
+    .filter { font-size: 10px; right: 16px; }
+    .filter button { padding: 0 2px; }
+    #filterArt { top: 100px; }
+    #filterMedia { top: 122px; }
+    #leiste { flex-wrap: wrap; justify-content: center; width: calc(100vw - 24px); gap: 6px; bottom: 10px; }
+    #leiste button { font-size: 11px; letter-spacing: 2px; padding: 8px 12px 7px 14px; }
+  }
 </style>
 </head>
 <body data-modus="foto">

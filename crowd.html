@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f6f3ed">
 <title>纸上的小人 · 一群朋友</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
@@ -46,6 +47,15 @@
   }
   #andere:hover { color: #2b2320; border-color: #2b2320; }
   @media (max-width: 759px) { #andere { display: none; } }
+  /* 手机端：标题换行、计数下移、导航收紧、去双击缩放（滑块本身已支持触屏） */
+  @media (max-width: 719px) {
+    body { overscroll-behavior: none; }
+    button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    #titel { font-size: 13px; line-height: 1.7; top: 16px; left: 16px; max-width: 54vw; white-space: normal; }
+    #zaehler { top: 92px; left: 16px; }
+    .sprung { top: 16px; right: 16px; font-size: 11px; letter-spacing: 1px; }
+    .sprung a { padding: 3px 0; }
+  }
 </style>
 </head>
 <body data-modus="crowd">

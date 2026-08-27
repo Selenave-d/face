@@ -222,8 +222,8 @@ function platzGeometrie(platz) {
 
 function platzieren(kind) {
   const g = platzGeometrie(kind.platz);
-  // 涂鸦小孩总高约 1.65k：k 由行高推出
-  kind.k = g.hinten ? innerHeight * .115 : innerHeight * .15;
+  // 涂鸦小孩总高约 1.65k：k 由行高推出；窄屏再按「每行 5 人的间隔」收紧，前排不至于叠成一串
+  kind.k = Math.min(g.hinten ? innerHeight * .115 : innerHeight * .15, innerWidth / 5.6);
   kind.x = g.x + kind.ox;
   kind.footY = g.fussY + kind.oy;
   kind.nameY = g.fussY + kind.k * .2 + kind.oy;
@@ -439,7 +439,8 @@ function zeichneBanner(t) {
   const dimName = { art: '物种', kopf: '头顶', brille: '眼镜', frisur: '发型' }[ergebnis.dim];
   const detail = ergebnis.info ? `${dimName}·${ergebnis.info}` : dimName;
   const requis = ergebnis.notes?.length ? `　${ergebnis.notes.join(' ')}` : '';
-  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, 92);
+  // 手机端横幅下移，避开右上角的过滤器两行
+  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, innerWidth < 720 ? 148 : 92);
   ctx.restore();
 }
 
@@ -449,7 +450,8 @@ function zeichneGesamt() {
   try { ctx.letterSpacing = '2px'; } catch (e) { /*  ignore */ }
   ctx.textAlign = 'center';
   ctx.fillStyle = '#7a7268';
-  ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, 64);
+  // 手机端总分上移一点，避开换行后的标题
+  ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, innerWidth < 720 ? 74 : 64);
   ctx.restore();
 }
 
@@ -458,9 +460,10 @@ function zeichneGesamt() {
 // 道具小画统一用石墨笔（8fps 沸腾与角色一致）
 function requisitStift(t) { return bleiStift(ctx, Math.floor(t * 8), 'graphite', .5); }
 
-// 卡片几何：中央两张 170×210
+// 卡片几何：中央两张 170×210（窄屏随宽度收缩，320px 的手机也能并排放下）
 function kartenLayout() {
-  const w = 170, h = 210, y = innerHeight / 2 - h / 2 - 10;
+  const w = Math.min(170, Math.floor((innerWidth - 76) / 2)), h = Math.round(w * 210 / 170);
+  const y = innerHeight / 2 - h / 2 - 10;
   return [
     { x: innerWidth / 2 - w - 24, y, w, h },
     { x: innerWidth / 2 + 24, y, w, h },
@@ -491,6 +494,7 @@ function kartonRect(x, y, w, h, r) {
 
 function zeichneKarte(item, k, t, idx) {
   const st = requisitStift(t);
+  const f = k.w / 170;   // 窄屏卡片收缩时，卡面内容同比缩放
   // 出现/收下的小弹跳（过冲曲线）
   const ein = Math.min(1, (t - draft.seit) / .35);
   const raus = draft.wahl === idx ? Math.min(1, (t - draft.wahlT) / .3) : 0;
@@ -508,21 +512,21 @@ function zeichneKarte(item, k, t, idx) {
   st.line([[-k.w / 2, -k.h / 2 + 8], [-k.w / 2, k.h / 2 - 8]], 1.1, { label: 304 + idx, alpha: .55 });
   st.line([[k.w / 2, -k.h / 2 + 8], [k.w / 2, k.h / 2 - 8]], 1.1, { label: 306 + idx, alpha: .55 });
   // 物件小画（96px REF 框）
-  REQUISITEN[item.familie].draw(st, 0, -k.h / 2 + 66, 96, item.params);
+  REQUISITEN[item.familie].draw(st, 0, -k.h / 2 + 66 * f, 96 * f, item.params);
   // 名字与效果
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '16px "Kaiti", "STKaiti", "楷体", serif';
   ctx.fillStyle = '#2e2839';
-  ctx.fillText(REQUISITEN[item.familie].name, 0, 28);
+  ctx.fillText(REQUISITEN[item.familie].name, 0, 28 * f);
   ctx.font = '11px "Courier New", ui-monospace, monospace';
   ctx.fillStyle = '#7a7268';
-  ctx.fillText(REQUISITEN[item.familie].desc(item.params), 0, 52);
-  if (besitz.length >= 6) ctx.fillText('（收满：替换最旧）', 0, 70);
+  ctx.fillText(REQUISITEN[item.familie].desc(item.params), 0, 52 * f);
+  if (besitz.length >= 6) ctx.fillText('（收满：替换最旧）', 0, 70 * f);
   if (draft.wahl === idx) {
     ctx.font = '13px "Kaiti", "STKaiti", "楷体", serif';
     ctx.fillStyle = '#b0654a';
-    ctx.fillText('收下了', 0, k.h / 2 - 22);
+    ctx.fillText('收下了', 0, k.h / 2 - 22 * f);
   }
   ctx.restore();
 }
@@ -567,28 +571,30 @@ function zeichneBlitz(t) {
   ctx.restore();
 }
 
-// 拥有栏：左下角逐个排开（~48px 小卡）
+// 拥有栏：左下角逐个排开（~48px 小卡；手机端卡片缩小并上移，避开折行的按钮条）
 function zeichneBesitz(t) {
   if (!besitz.length) return;
   const st = requisitStift(t);
+  const mob = innerWidth < 720;
+  const cw = mob ? 40 : 48, ch = mob ? 46 : 56;
   besitz.forEach((item, i) => {
-    const x = 26 + i * 58, y = innerHeight - 76;
+    const x = 26 + i * (cw + 10), y = innerHeight - (mob ? 128 : 76);
     ctx.save();
-    kartonRect(x, y, 48, 56, 6);
+    kartonRect(x, y, cw, ch, 6);
     ctx.fillStyle = 'rgba(246,243,237,.8)';
     ctx.fill();
     ctx.restore();
-    st.line([[x + 5, y], [x + 43, y]], 1, { label: 320 + i, alpha: .4 });
-    st.line([[x + 5, y + 56], [x + 43, y + 56]], 1, { label: 321 + i, alpha: .4 });
+    st.line([[x + 5, y], [x + cw - 5, y]], 1, { label: 320 + i, alpha: .4 });
+    st.line([[x + 5, y + ch], [x + cw - 5, y + ch]], 1, { label: 321 + i, alpha: .4 });
     ctx.save();
-    ctx.translate(x + 24, y + 24);
-    REQUISITEN[item.familie].draw(st, 0, 0, 42, item.params);
+    ctx.translate(x + cw / 2, y + ch / 2 - 3);
+    REQUISITEN[item.familie].draw(st, 0, 0, mob ? 34 : 42, item.params);
     ctx.restore();
     ctx.save();
-    ctx.font = '9px "Kaiti", "STKaiti", "楷体", serif';
+    ctx.font = (mob ? 8 : 9) + 'px "Kaiti", "STKaiti", "楷体", serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#a89f93';
-    ctx.fillText(REQUISITEN[item.familie].name, x + 24, y + 48);
+    ctx.fillText(REQUISITEN[item.familie].name, x + cw / 2, y + ch - (mob ? 8 : 9));
     ctx.restore();
   });
 }
