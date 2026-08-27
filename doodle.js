@@ -317,9 +317,15 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     for (let d = -diag / 2; d < diag / 2; d += luecke) {
       const r = jr(label, Math.round(d * 13));
       const j1 = (r() - .5) * gap, j2 = (r() - .5) * gap;
+      const ax = cx + cos * (d + j1) - sin * diag, ay = cy + sin * (d + j1) + cos * diag;
+      const bx = cx + cos * (d + j2) + sin * diag, by = cy + sin * (d + j2) - cos * diag;
       ctx.beginPath();
-      ctx.moveTo(cx + cos * (d + j1) - sin * diag, cy + sin * (d + j1) + cos * diag);
-      ctx.lineTo(cx + cos * (d + j2) + sin * diag, cy + sin * (d + j2) - cos * diag);
+      ctx.moveTo(ax, ay);
+      for (let m = 1; m <= 2; m++) {   // 中段两个抖点（沿排线法向）：铅笔排线不再是纯直线
+        const u = m / 3, jm = (r() - .5) * gap;
+        ctx.lineTo(ax + (bx - ax) * u + cos * jm, ay + (by - ay) * u + sin * jm);
+      }
+      ctx.lineTo(bx, by);
       ctx.strokeStyle = `rgba(${M.farbe},${alpha * (.55 + r() * .45)})`;
       ctx.lineWidth = w * M.w;
       ctx.lineCap = 'round';
@@ -347,7 +353,9 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
   function tone(pts, opt = {}) {
     const dunkel = !!opt.dunkel;
     if (!istWash) {
-      hatch(pts, (dunkel ? .05 : .06) * (opt.k ?? 10) / 10, -.9, dunkel ? .8 : .3, opt.label ?? 9);
+      // 排线角度按部件 label 错开 ±.3rad，不再全图一个方向
+      const wk = opt.winkel ?? (-.9 + (((opt.label ?? 9) % 3) - 1) * .3);
+      hatch(pts, (dunkel ? .05 : .06) * (opt.k ?? 10) / 10, wk, dunkel ? .8 : .3, opt.label ?? 9);
       return;
     }
     const rgb = dunkel ? [120, 105, 100] : washRGB;
@@ -355,12 +363,13 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
   }
   /* —— 原语 haut：头与身体的处理 —— */
   function haut(pts, dunkel, opt = {}) {
+    const wk = opt.winkel ?? -.9;
     if (dunkel) {
       if (istWash) {
         wash(pts, [125, 110, 105], .4, 11);
-        hatch(pts, .07 * (opt.k ?? 10) / 10, -.9, .35, 12);   // 深色角色：淡彩 + 局部排线
+        hatch(pts, .07 * (opt.k ?? 10) / 10, wk, .35, 12);   // 深色角色：淡彩 + 局部排线
       } else {
-        hatch(pts, .055 * (opt.k ?? 10) / 10, -.9, .8, 14);
+        hatch(pts, .055 * (opt.k ?? 10) / 10, wk, .8, 14);
       }
       return;
     }
@@ -1034,7 +1043,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   }
   // 身体：小椭圆（haut 原语决定深色/浅色/介质填法）
   const koerper = kreisPts(0, -.3 * k, .26 * k, .21 * k, 18, .05, rec.seed + 11);
-  stift.haut(koerper, torsoDark(rec), { k });
+  stift.haut(koerper, torsoDark(rec), { k, winkel: -.55 });   // 身体排线与头错开角度，交叉出铜版画味
   stift.line(koerper, 1.5, { closed: true, label: 13 });
   // 手臂：细棍下垂
   for (const s of [-1, 1]) {

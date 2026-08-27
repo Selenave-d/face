@@ -2468,6 +2468,17 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
       const arm = gliedKette([S, E, W], [armW * 1.25, armW * 1.05, armW * .8]);
       stift.flaeche(arm, { farbe: pal.stoff, spur: `arm${s}`, wackel: .004 });
       stift.zug(arm, { spur: `arm-rand${s}`, geschlossen: true, ...duenn });
+      // 肘下两道布褶：沿前臂方向、横跨袖管的微斜短撇
+      const dE = { x: W.x - E.x, y: W.y - E.y }, dlE = Math.hypot(dE.x, dE.y) || 1;
+      const fx = dE.x / dlE, fy = dE.y / dlE;
+      for (let f = 0; f < 2; f++) {
+        const o = .06 + f * .07, hw = armW * (.95 - f * .2);
+        const c = { x: E.x + fx * o, y: E.y + fy * o };
+        stift.zug([
+          { x: c.x + fy * hw, y: c.y - fx * hw },
+          { x: c.x + fx * .03 - fy * hw * .65, y: c.y + fy * .03 + fx * hw * .65 },
+        ], { spur: `falte-elle${s}${f}`, ...duenn, deckung: .5, einlagig: true, spitz: .85 });
+      }
       const nW = pathNormals([E, W])[1];
       stift.zug([
         { x: W.x + nW.x * armW * .8, y: W.y + nW.y * armW * .8 },
@@ -2581,6 +2592,21 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     T({ x: mx, y: Y(hemY) + .05 }),
     T({ x: mx + saumHW * .96, y: Y(hemY - .01) }),
   ], { spur: 'saum', ...duenn, deckung: .75 });
+
+  // 布褶（淡墨短撇，褶随形走）：腰侧收口各一道；下摆上方各一道短竖撇
+  // （开衫已有整排罗纹竖撇，不叠）
+  for (const s of [-1, 1]) {
+    stift.zug([
+      T({ x: mx + s * tailleHW * .95, y: Y(schulterY + bodyLen * .28) }),
+      T({ x: mx + s * tailleHW * .7, y: Y(schulterY + bodyLen * .33) }),
+    ], { spur: `falte-taille${s}`, ...duenn, deckung: .45, einlagig: true });
+    if (oberteil !== 'cardigan') {
+      stift.zug([
+        T({ x: mx + s * saumHW * .55, y: Y(hemY - .1) }),
+        T({ x: mx + s * saumHW * .5, y: Y(hemY - .035) }),
+      ], { spur: `falte-saum${s}`, ...duenn, deckung: .45, einlagig: true });
+    }
+  }
 
   // 领口结构与细节：先有领形，再谈扣子抽绳
   if (oberteil === 'tshirt') {

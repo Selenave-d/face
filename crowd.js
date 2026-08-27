@@ -125,6 +125,7 @@ const andereEl = document.getElementById('andere');
 
 const UI_PAL = makePalette({ hautT: .5, haarT: .1, akzentT: .5, tinteT: .5 });
 let schiebStift = null, schiebTick = -1;
+let bodenStift = null, bodenTick = -1;   // 地面线与影子的笔（与滑块同款 8fps 沸腾）
 
 function wertAusX(x) {
   const b = schieberEl.getBoundingClientRect();
@@ -329,6 +330,14 @@ function rahmen(now) {
   papier();
   feierTick(t);
 
+  // 地面线：比最前排的脚再低几像素，画在人群后面，身体自然盖住脚后的线
+  const bt = Math.floor(t * 8);
+  if (bodenTick !== bt) { bodenStift = makeStift(ctx, 555, UI_PAL.tinte, 1, bt); bodenTick = bt; }
+  const bodenY = innerHeight - BODEN_RAUM + 5;
+  bodenStift.zug(
+    [{ x: innerWidth * .04, y: bodenY }, { x: innerWidth * .5, y: bodenY + 3 }, { x: innerWidth * .96, y: bodenY }],
+    { spur: 'bodenlinie', w: 1.4, deckung: .6, eckig: true });
+
   // 人群：站位顺序已是后→前，直接按序画，前排自然盖住后排的脚
   const sicht = sichtbarAus(wert);
   const namenAn = sicht <= 12.5;   // 朋友还叫得出名字的时候，报上名来
@@ -339,6 +348,16 @@ function rahmen(now) {
     h.update(dt, t, pointer);
     h.zeigeName = namenAn;
     if (alpha < 1) ctx.globalAlpha = alpha;
+    // 脚下影子：三根短斜线，跳起时人离地、影子钉在原地并收窄变淡
+    const dy = h.akName === 'jump' ? h.motionPose(t).dy : 0;
+    const schrumpf = 1 - Math.max(0, -dy) * .7;
+    for (let f = 0; f < 3; f++) {
+      const fo = (f - 1) * .12;
+      bodenStift.zug([
+        { x: p.x + (fo - .1) * p.mass * schrumpf, y: p.bodenY + 2 + f },
+        { x: p.x + (fo + .1) * p.mass * schrumpf, y: p.bodenY + 3 + f },
+      ], { spur: `schatten${i}-${f}`, w: 1, deckung: .22 * schrumpf, eckig: true });
+    }
     drawHead(ctx, h, t);
     ctx.globalAlpha = 1;
   }
