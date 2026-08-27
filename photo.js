@@ -26,19 +26,12 @@ function musterAusZaehl(zaehl) {
   if (c[0] === 2) return ['一对', 20, 1, `两个${eintraege[0][0]}`];
   return ['彩虹班', 60, 3, ''];   // 5 人全不同
 }
-function musterVon(werte) {
-  const zaehl = {};
-  for (const v of werte) zaehl[v] = (zaehl[v] || 0) + 1;
-  return musterAusZaehl(zaehl);
-}
 
 /* ================= 道具 =================
  * 物件 = 种子化参数包 + 一幅铅笔小画 + 一条计分效果（数值即画法：
  * 灯笼光圈多大就加多少分、喇叭口多大就喊多响、玩偶画的是什么动物就补什么物种）。
  * 效果在 besteHand 计分管线里按顺序应用。
  */
-
-const ART_KURZ = { human: '人', dog: '狗', cat: '猫', rabbit: '兔', bear: '熊', alp: '魇' };
 
 const REQUISITEN = {
   denglong: {
@@ -71,7 +64,7 @@ const REQUISITEN = {
   wanou: {
     name: '玩偶',
     roll: (r) => ({ art: r.pick(['dog', 'cat', 'rabbit', 'bear']) }),
-    desc: (p) => `物种计数：${ART_KURZ[p.art]} +1`,
+    desc: (p) => `物种计数：${ART_NAME[p.art]} +1`,
     draw(st, x, y, s, p) {
       // 小动物头 + 身体，耳朵随物种（画的是什么动物就补什么）
       st.line(kreisPts(x, y - s * .12, s * .2, s * .18, 14, .05, 5), 1.4, { closed: true, label: 1 });
@@ -89,7 +82,7 @@ const REQUISITEN = {
       st.line([[x - s * .04, y - s * .06], [x + s * .04, y - s * .05]], 1.1, { label: 12 });
       st.line(kreisPts(x, y + s * .2, s * .13, s * .11, 12, .05, 6), 1.3, { closed: true, label: 13 });
     },
-    extraCount: (p) => ({ dim: 'art', value: ART_KURZ[p.art], n: 1, note: `玩偶+1${ART_KURZ[p.art]}` }),
+    extraCount: (p) => ({ dim: 'art', value: ART_NAME[p.art], n: 1, note: `玩偶+1${ART_NAME[p.art]}` }),
   },
   yanjing: {
     name: '眼镜盒',
@@ -329,8 +322,9 @@ function knips(t) {
   phase = 'sprung';
   sprungT = t;
   rausFertig = false;
+  let staffel = 0;
   for (const i of gewaehlt) {
-    kinder[i].hopT = t + [...gewaehlt].indexOf(i) * .06;   // 拍照齐跳（略错峰）
+    kinder[i].hopT = t + staffel++ * .06;   // 拍照齐跳（略错峰）
     kinder[i].hopAmp = .5;
   }
 }
@@ -482,18 +476,31 @@ function karteBei(px, py) {
   return -1;
 }
 
+// 卡面圆角：没有 ctx.roundRect 的旧浏览器退回 arcTo 手画，
+// 免得一次 TypeError 把整个 requestAnimationFrame 循环打断
+function kartonRect(x, y, w, h, r) {
+  ctx.beginPath();
+  if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 function zeichneKarte(item, k, t, idx) {
   const st = requisitStift(t);
   // 出现/收下的小弹跳（过冲曲线）
   const ein = Math.min(1, (t - draft.seit) / .35);
   const raus = draft.wahl === idx ? Math.min(1, (t - draft.wahlT) / .3) : 0;
-  const skal = (.8 + .2 * (1 + Math.sin(ein * Math.PI * .6)) * ein) * (1 + raus * .25 * Math.sin(raus * Math.PI));
+  // 小弹跳：中途过冲 8%，落定回到原尺寸（命中框就是原尺寸，不能停在放大态）
+  const skal = (.8 + .2 * ein + .18 * Math.sin(ein * Math.PI)) * (1 + raus * .25 * Math.sin(raus * Math.PI));
   ctx.save();
   ctx.translate(k.x + k.w / 2, k.y + k.h / 2);
   ctx.scale(skal, skal);
   // 卡面：纸白圆角卡 + 细框
-  ctx.beginPath();
-  ctx.roundRect(-k.w / 2, -k.h / 2, k.w, k.h, 10);
+  kartonRect(-k.w / 2, -k.h / 2, k.w, k.h, 10);
   ctx.fillStyle = 'rgba(246,243,237,.94)';
   ctx.fill();
   st.line([[-k.w / 2 + 8, -k.h / 2], [k.w / 2 - 8, -k.h / 2]], 1.1, { label: 300 + idx, alpha: .55 });
@@ -567,8 +574,7 @@ function zeichneBesitz(t) {
   besitz.forEach((item, i) => {
     const x = 26 + i * 58, y = innerHeight - 76;
     ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x, y, 48, 56, 6);
+    kartonRect(x, y, 48, 56, 6);
     ctx.fillStyle = 'rgba(246,243,237,.8)';
     ctx.fill();
     ctx.restore();
