@@ -45,11 +45,11 @@ function platzeLegen() {
   for (let r = 0; r < R; r++) {
     mass0 = Math.min(mass0, (innerWidth - rand * 2) / (plan[r] * REIHEN_FAKTOR[r] * 2.9));
   }
-  // 天花板：最高那排（连帽子带名字）不许钻进标题区
+  // 天花板：最高那排（连帽子带名字）不许钻进标题区；超矮窗口（内嵌 iframe 等）兜底为正值，免得负缩放把人倒画
   let spanntMax = 0;
   for (const h of leute) spanntMax = Math.max(spanntMax, raumBedarf(h).oben + fussWelt(h) + .4);
   const sumF = REIHEN_FAKTOR.slice(1).reduce((a, b) => a + b, 0);
-  mass0 = Math.min(mass0, (bodenVorn - TITEL_RAUM) / (.48 * sumF + spanntMax * REIHEN_FAKTOR[0]));
+  mass0 = Math.max(3, Math.min(mass0, (bodenVorn - TITEL_RAUM) / (.48 * sumF + spanntMax * REIHEN_FAKTOR[0])));
   const mass = REIHEN_FAKTOR.map((f) => f * mass0);
   // 地面线：前排最低，往后每行抬高约半个人
   const boden = new Array(R);
@@ -140,11 +140,16 @@ schieberEl.addEventListener('pointerdown', (e) => {
 schieberEl.addEventListener('pointermove', (e) => {
   if (ziehe) wert = ziel = wertAusX(e.clientX);
 });
-schieberEl.addEventListener('pointerup', () => {
+// 触屏滚动接管 / 失焦时浏览器发 pointercancel 而非 pointerup：也要正常结束拖拽，
+// 否则手柄永久卡在握住态、吸附动画失效
+const endeZug = () => {
   if (!ziehe) return;
   ziehe = false;
   snappZu(wert);
-});
+};
+schieberEl.addEventListener('pointerup', () => endeZug());
+schieberEl.addEventListener('pointercancel', () => endeZug());
+schieberEl.addEventListener('lostpointercapture', () => endeZug());
 schieberEl.addEventListener('keydown', (e) => {
   if (e.key === 'Home') { e.preventDefault(); snappZu(1); return; }
   if (e.key === 'End') { e.preventDefault(); snappZu(500); return; }
@@ -225,6 +230,7 @@ let feier = false;
 let sprungBei = 0, raketenBei = 0;
 const raketen = [];
 let raketeSaat = 0;
+const SPRUNG_PERIODE = 1.7;   // 起跳动作整周期（含落地回弹），重启要等它走完
 
 // 低饱和的墨水烟花：暖红、赭金、苔绿、灰紫
 const KNALL = [oklch(.68, .17, 28), oklch(.74, .15, 85), oklch(.66, .13, 152), oklch(.64, .15, 300)];
@@ -256,10 +262,10 @@ function feierTick(t) {
     feier = false;
     return;
   }
-  // 全员同步起跳，落了再跳
+  // 全员同步起跳，落完整个周期（含回弹）再跳，不打断半空姿态
   if (t >= sprungBei) {
-    for (const h of leute) h.setAktion('jump', t, 1.7);
-    sprungBei = t + 1.45;
+    for (const h of leute) h.setAktion('jump', t, SPRUNG_PERIODE);
+    sprungBei = t + SPRUNG_PERIODE;
   }
   // 每零点几秒补一批烟花
   if (t >= raketenBei) {
