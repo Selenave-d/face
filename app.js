@@ -656,7 +656,8 @@ function makeDNA(seed) {
   const haar = waehle(HAAR_W, 'haar');
   let deckTab = DECKUNG_W;
   if (HOHE_FRISUREN.has(haar)) deckTab = DECKUNG_W.filter(([id]) => id === 'keine' || id === 'hut');
-  if (haar === 'zoepfe' || haar === 'dutt') deckTab = deckTab.filter(([id]) => id !== 'hut');
+  // afro/卷发云是整球发量，帽子落位只认裸颅骨，会整个埋进发球里——直接不戴
+  if (haar === 'zoepfe' || haar === 'dutt' || haar === 'afro' || haar === 'lockenwolke') deckTab = deckTab.filter(([id]) => id !== 'hut');
   const kopfbedeckung = waehle(deckTab, 'kopfbedeckung');
   const brille = waehle(BRILLE_W, 'brille');
   const bart = waehle(BART_W, 'bart');
@@ -2781,7 +2782,7 @@ function drawHead(ctx, head, t) {
   const fernEintrag = augeFelder.find((e) => e.seite !== nah);
   const nahEintrag = augeFelder.find((e) => e.seite === nah);
   zeichneAugeKomplett(fernEintrag.seite, fernEintrag.feld, fernEintrag.u);
-  drawNose(stift, feldAn(0, dna.layout.zonen.nase.v, ctx3d), groessen.nase, mk.nase, pose.yaw >= 0 ? 1 : -1, pose.yaw, pal);
+  drawNose(stift, feldAn(0, dna.layout.zonen.nase.v, ctx3d), groessen.nase, mk.nase, dna.pose.yaw >= 0 ? 1 : -1, pose.yaw, pal);
   zeichneAugeKomplett(nahEintrag.seite, nahEintrag.feld, nahEintrag.u);
   drawMouth(stift, feldAn(0, dna.layout.mundV, ctx3d), groessen.mundBreit, groessen.mundHoch, mk.mund, pal, z.mund, z.wach, cache.herz);
   function zeichneAugeKomplett(seite, feld, u) {
@@ -2838,6 +2839,11 @@ let heads = [];
 let dpr = 1;
 let vergroessert = -1;   // 一墙脸模式：点一颗头放大居中（-1 = 整墙）
 let baseSeed = 1000;
+// ?seed=N 指定初始人 / 初始墙（分享与复现）；换人/换版后写回 URL
+{
+  const s = parseInt(new URLSearchParams(location.search).get('seed'), 10);
+  if (Number.isFinite(s) && s > 0) baseSeed = s;
+}
 
 /* 纸纹：128px 的噪点 + 短划痕砖，平铺出纸面颗粒 */
 let grainPattern = null;
@@ -2966,6 +2972,7 @@ function reshuffle() {
   baseSeed = Math.floor(Math.random() * 1e9);
   heads = [];
   layout();
+  try { history.replaceState(null, '', '?seed=' + baseSeed); } catch (e) { /* file:// 等环境可能拒绝改 query */ }
 }
 
 const pointer = { x: 0, y: 0, active: false };
