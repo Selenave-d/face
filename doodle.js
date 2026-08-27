@@ -198,7 +198,7 @@ function doodleRecipe(seed, erzwinge = {}) {
     mouth: { style: cM.pick(rM, 'style', [['wobble', 22], ['tiny', 18], ['smirk', 14], ['frown', 12], ['zigzag', 10], ['grit', 8], ['buckteeth', 8], ['stitch', 4], ['cat', 8], ['tongue', 6]]) },
     nose: { style: cN.pick(rN, 'style', [['none', 30], ['button', 28], ['line', 24], ['triangle', 18]]), size: cN.range(rN, 'size', .9, 1.2) },
     hair: { style: cH.pick(rH, 'style', [['bald', 12], ['bob', 13], ['messy', 12], ['spiky', 10], ['bowl', 10], ['curly', 9], ['buzz', 8], ['afro', 6], ['pigtails', 7], ['long', 5], ['buns', 4], ['topknot', 3], ['mohawk', 2], ['cowlick', 3]]) },
-    torso: { dark: rS.chance(.6) && false, shape: dRng(seed, 'torso').pick([['bean', 40], ['round', 30], ['pear', 30]]) },
+    torso: { shape: dRng(seed, 'torso').pick([['bean', 40], ['round', 30], ['pear', 30]]) },
     tail: { style: cT.pick(rT, 'style', [['none', 100]]) },
     extras: {
       spots: cX.chance(rX, 'spots', .06),
@@ -520,7 +520,8 @@ function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
         stift.dot(x + dx * .7, ey + .025 * k + dy * .6, .032 * k * sc, .8, 41 + seite);
         break;
       case 'angry':
-        stift.line([[x - .09 * k * sc, ey - .1 * k * seite * 0 + (seite < 0 ? -.02 : -.06) * k], [x + .09 * k * sc, ey + (seite < 0 ? -.06 : -.02) * k]], 1.4, { label: 42 + seite });
+        // 内低外高，与怒眉「外高内低压向眼睛」同一方向
+        stift.line([[x - .09 * k * sc, ey + (seite < 0 ? -.04 : .02) * k], [x + .09 * k * sc, ey + (seite < 0 ? .02 : -.04) * k]], 1.4, { label: 42 + seite });
         stift.dot(x + dx * .7, ey + .02 * k + dy * .6, .04 * k * sc, .88, 43 + seite);
         break;
       case 'spiral': {
@@ -548,7 +549,6 @@ function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
 function zeichneNase(stift, rec, k) {
   const n = rec.nose;
   const ny = (-.95 + .18) * k;
-  if (rec.skull.muzzle > 0) return;   // 吻部上的鼻子在吻部里画
   const size = n.size;
   if (n.style === 'button') stift.dot(0, ny, .045 * k * size, .9, 51);
   else if (n.style === 'line') stift.line([[0, ny - .05 * k * size], [0, ny + .05 * k * size]], 1.4, { label: 52 });
@@ -669,6 +669,9 @@ function zeichneMuzzle(stift, rec, k, face = 'ruhig') {
     stift.line(bogenPts(0, mundY + .05 * k, .09 * k, .06 * k, Math.PI * 1.12, Math.PI * 1.88, 8), 1.4, { label: 89 });
   } else if (face === 'angst') {
     stift.dot(0, mundY, .035 * k, .7, 89);
+  } else if (face === 'schlaeft') {
+    // 睡着的小嘴：配方里的吐舌/猫嘴都不画
+    stift.line([[-.05 * k, mundY], [.05 * k, mundY + .012 * k]], 1.3, { label: 88 });
   } else if (rec.mouth.style === 'cat') {
     // 猫嘴：一个 W，从瓣尖垂下来两瓣弧
     const w = .1 * k;
@@ -689,6 +692,8 @@ function zeichneCrest(stift, rec, k, kopf) {
   let topY = 1e9;
   for (const p of kopf) topY = Math.min(topY, p[1]);
   const R = .44 * rec.skull.s * k;
+  // 真实头半宽（含 wf 与宽脸加成）：耳根的横向落位以它为准，窄头不出悬空耳
+  const RX = R * rec.skull.wf * (rec.skull.shape === 'wide' ? 1.14 : 1);
   const len = c.len;
   switch (c.style) {
     case 'sprout': {
@@ -719,7 +724,7 @@ function zeichneCrest(stift, rec, k, kopf) {
       for (const sd of [-1, 1]) {
         const L = R * 1.15 * len;
         const fettOhr = .55 + .45 * len;   // 长耳必须更宽，不然是挂面
-        const bx = sd * R * .6, by = topY + R * .12;
+        const bx = sd * RX * .62, by = topY + R * .12;
         const spine = chaikin2(chaikin2([
           [bx - sd * R * .05, by],
           [bx + sd * R * .26, by + L * .2],
@@ -741,19 +746,19 @@ function zeichneCrest(stift, rec, k, kopf) {
     }
     case 'bear':
       for (const s of [-1, 1]) {
-        const x = s * R * .55;
+        const x = s * RX * .58;
         stift.line(bogenPts(x, topY + R * .12, R * .26, R * .3, Math.PI, TAU2, 8), 1.5, { label: 100 + s });
         stift.line(bogenPts(x, topY + R * .14, R * .12, R * .14, Math.PI, TAU2, 6), 1.1, { label: 102 + s, alpha: .55 });
       }
       break;
     case 'cat':
       for (const s of [-1, 1]) {
-        const x0 = s * R * .35, x1 = s * R * .8;
-        const poly = [[x0, topY + R * .12], [s * R * .62, topY - R * .5 * len], [x1, topY + R * .18]];
+        const x0 = s * RX * .38, x1 = s * RX * .84;
+        const poly = [[x0, topY + R * .12], [s * RX * .64, topY - R * .5 * len], [x1, topY + R * .18]];
         if (stift.istWash) stift.tone(poly, { label: 105 + s, k });
         stift.line(poly, 1.5, { closed: true, label: 104 + s });
         // 内耳线：小一号同形
-        stift.line([[x0 + s * R * .1, topY + R * .1], [s * R * .62, topY - R * .32 * len], [x1 - s * R * .1, topY + R * .14]], 1, { label: 103 + s, alpha: .5 });
+        stift.line([[x0 + s * R * .1, topY + R * .1], [s * RX * .64, topY - R * .32 * len], [x1 - s * R * .1, topY + R * .14]], 1, { label: 103 + s, alpha: .5 });
       }
       break;
     case 'bunny':
@@ -761,7 +766,7 @@ function zeichneCrest(stift, rec, k, kopf) {
         // 长椭圆耳：允许一竖一垂（垂的那只向外倒）。
         // 竖耳的弧角要越过头顶（端点 y > topY），耳根扎进头轮廓里才不悬空
         const haengt = rec.crest.ohrHaengt === s;
-        const x = s * R * .32;
+        const x = s * RX * .34;
         if (haengt) {
           const spine = chaikin2([
             [x, topY + R * .05],
@@ -777,7 +782,7 @@ function zeichneCrest(stift, rec, k, kopf) {
       break;
     case 'horns':
       for (const s of [-1, 1]) {
-        stift.line([[s * R * .5, topY + R * .1], [s * R * .75, topY - R * .3 * len], [s * R * .55, topY - R * .45 * len]], 1.6, { label: 110 + s });
+        stift.line([[s * RX * .52, topY + R * .1], [s * RX * .78, topY - R * .3 * len], [s * RX * .56, topY - R * .45 * len]], 1.6, { label: 110 + s });
       }
       break;
   }
@@ -930,14 +935,19 @@ function zeichneFlecken(stift, rec, k) {
   if (!rec.extras.spots) return;
   const cy = -.95 * k;
   const R = .44 * rec.skull.s * k;
+  const RX = R * rec.skull.wf * (rec.skull.shape === 'wide' ? 1.14 : 1);
   const r = _mb(_h2(rec.seed, 41));
   const n = 2 + Math.floor(r() * 3);
   const ex = .44 * rec.skull.wf * rec.skull.s * .44 * rec.eyes.sx * k;
   const stellen = [
     () => [(r() < .5 ? 1 : -1) * ex * (1.35 + r() * .35), cy - R * (.25 + r() * .25)],   // 眉骨外侧（不压眼睛）
-    () => [(r() < .5 ? 1 : -1) * R * (0.7 + r() * .3), cy - R * (0.5 + r() * .4)],           // 耳侧
+    () => {   // 耳侧：按头颅椭圆边界内收，窄头的墨斑不飘出轮廓
+      const hf = .5 + r() * .4;
+      const hb = RX * Math.sqrt(Math.max(.08, 1 - hf * hf * .85));
+      return [(r() < .5 ? 1 : -1) * hb * (.6 + r() * .3), cy - R * hf];
+    },
     () => [(r() - .5) * R * .5, -.3 * k + (r() - .5) * .16 * k],                             // 身上
-    () => [(r() - .5) * R * 1.1, cy + (r() - .5) * R * .8],
+    () => [(r() - .5) * RX * .9, cy + (r() - .5) * R * .8],
   ];
   for (let i = 0; i < n; i++) {
     const [sx, sy] = stellen[i % stellen.length]();
@@ -974,12 +984,16 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
   if (x.glasses) {
     const ey = -.98 * k;
     const ex = .44 * rec.skull.wf * rec.skull.s * .44 * rec.eyes.sx * k;
+    const RX = .44 * rec.skull.wf * rec.skull.s * k * (rec.skull.shape === 'wide' ? 1.14 : 1);
+    // 镜片随两眼间距收放：窄脸不至于两片镜子叠在鼻梁上，镜桥保底长度
+    const lr = Math.min(.15 * k, Math.max(.085 * k, ex * .92));
     for (const s of [-1, 1]) {
-      stift.line(kreisPts(s * ex, ey, .15 * k, .15 * k, 16, .03, rec.seed + s), 1.3, { closed: true, label: 158 + s });
+      stift.line(kreisPts(s * ex, ey, lr, lr, 16, .03, rec.seed + s), 1.3, { closed: true, label: 158 + s });
     }
-    stift.line([[-ex + .15 * k, ey], [ex - .15 * k, ey]], 1.2, { label: 160 });
+    const br = Math.max(.028 * k, ex - lr);
+    stift.line([[-br, ey], [br, ey]], 1.2, { label: 160 });
     for (const s of [-1, 1]) {
-      stift.line([[s * (ex + .15 * k), ey - .01 * k], [s * R * 1.02, ey - .06 * k]], 1.1, { label: 161 + s, alpha: .65 });
+      stift.line([[s * (ex + lr), ey - .01 * k], [s * RX * .97, ey - .06 * k]], 1.1, { label: 161 + s, alpha: .65 });
     }
   }
   if (x.tears || face === 'weint') {
