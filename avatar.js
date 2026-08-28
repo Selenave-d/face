@@ -85,38 +85,59 @@ function rahmen(now) {
   kopf.update(dt, t, pointer);
   gesichtTick(t);
   hookSync();
+  gesichtKnopfe();
   papier();
   zeichneBuehne(t);
   requestAnimationFrame(rahmen);
 }
 
-/* ================= 面部小动作（逗它） =================
- * 直接覆写引擎的视线/眼皮/嘴部状态；动作结束后 update() 的弹簧自然把脸拉回日常。 */
-const aktion = {};
+/* ================= 面部表情与小动作（逗它） =================
+ * 表情与视线是持续开关（留存）：点了就一直保持，换表情或按「回神」才解除；
+ * 说话/眨眼是一次性小演出。
+ * 表情 = 覆写引擎的五官选型（head.gesicht，app.js 的 drawHead 会读）；
+ * 视线/犯困 = 每帧在 update() 之后覆写状态，回神后由引擎弹簧自然拉回。 */
+const GESICHT_FORMEN = {
+  froh: { auge: 'froh', mund: 'laecheln' },
+  boese: { braue: 'schraeg', mund: 'zickzack' },
+  traurig: { braue: 'sorge', mund: 'welle' },
+  muede: { auge: 'schlaefrig' },
+};
+let gesichtForm = null;    // 当前持续表情（null = 日常）
+let blickZiel = null;      // 当前持续视线（null = 自在张望）
+
+const einmal = {};         // 一次性演出：说话/眨眼
 
 function gesichtAktion(art) {
   const t = performance.now() / 1000;
-  if (art === 'sprich') aktion.sprichBis = t + 1.5;
-  else if (art === 'blinz') aktion.blinzPlan = [t + .05, t + .45, t + .9];
-  else if (art === 'muede') aktion.muedeBis = t + 2.8;
-  else if (art === 'links' || art === 'rechts') {
-    aktion.blickBis = t + 2.2;
-    aktion.blickZiel = { x: art === 'links' ? -.55 : .55, y: 0 };
+  if (art === 'sprich') einmal.sprichBis = t + 1.5;
+  else if (art === 'blinz') einmal.blinzPlan = [t + .05, t + .45, t + .9];
+  else if (art === 'aufwachen') {   // 回神：清表情、清视线
+    gesichtForm = null; blickZiel = null;
+    kopf.gesicht = null;
+    setTimeout(frisch, 1300);       // 等弹簧回到日常再刷新导出快照
+  } else if (GESICHT_FORMEN[art]) {   // 表情开关：再点一次取消
+    gesichtForm = gesichtForm === art ? null : art;
+    kopf.gesicht = gesichtForm ? GESICHT_FORMEN[gesichtForm] : null;
+    setTimeout(frisch, gesichtForm === 'muede' ? 1300 : 200);   // 犯困要等眼皮垂下
+  } else if (art === 'links' || art === 'rechts') {
+    const ziel = { x: art === 'links' ? -.55 : .55, y: 0 };
+    blickZiel = (blickZiel && blickZiel.x === ziel.x) ? null : ziel;   // 再点取消
+    setTimeout(frisch, 1300);   // 转头到位/回中都给弹簧时间
   }
 }
 
 function gesichtTick(t) {
   const qt = Math.floor(t * 12) / 12;
-  if (t < (aktion.sprichBis || 0)) kopf.plappertBis = qt + .12;
-  if (aktion.blinzPlan && aktion.blinzPlan.length && qt >= aktion.blinzPlan[0] - .02) {
+  if (t < (einmal.sprichBis || 0)) kopf.plappertBis = qt + .12;
+  if (einmal.blinzPlan && einmal.blinzPlan.length && qt >= einmal.blinzPlan[0] - .02) {
     kopf.blinzeltBis = qt + .14;
-    aktion.blinzPlan.shift();
+    einmal.blinzPlan.shift();
   }
-  if (t < (aktion.muedeBis || 0)) kopf.wach += (0.12 - kopf.wach) * .12;
-  if (t < (aktion.blickBis || 0)) {
-    kopf.yaw += (aktion.blickZiel.x - kopf.yaw) * .14;
-    kopf.pitch += (aktion.blickZiel.y - kopf.pitch) * .14;
-    kopf.blickX += (aktion.blickZiel.x * 1.6 - kopf.blickX) * .2;
+  if (gesichtForm === 'muede') kopf.wach += (.12 - kopf.wach) * .12;
+  if (blickZiel) {
+    kopf.yaw += (blickZiel.x - kopf.yaw) * .14;
+    kopf.pitch += (blickZiel.y - kopf.pitch) * .14;
+    kopf.blickX += (blickZiel.x * 1.6 - kopf.blickX) * .2;
   }
 }
 
@@ -134,6 +155,7 @@ setTimeout(frisch, 100);   // 首帧画完再导出
 
 document.getElementById('neues').addEventListener('click', () => {
   kopf = neuesKopf((Math.random() * 1e9) | 0);
+  gesichtForm = null; blickZiel = null;   // 新人不继承旧表情
   try { history.replaceState(null, '', '?seed=' + saat); } catch (e) { /* file:// 可能拒绝 */ }
   setTimeout(frisch, 100);
 });
@@ -146,17 +168,27 @@ document.getElementById('speicher').addEventListener('click', () => {
   a.click();
 });
 
-// 逗它：按钮触发，点画布（戳脸）随机来一个
-const GESTEN = ['sprich', 'blinz', 'muede', 'links', 'rechts'];
+// 逗它：按钮触发（表情/视线为开关，主按钮样式的「回神」清空），点画布随机来一个
+const GESTEN = ['sprich', 'blinz', 'froh', 'boese', 'traurig', 'muede', 'links', 'rechts'];
 document.querySelectorAll('#gesichte button').forEach((b) => {
   b.addEventListener('click', () => gesichtAktion(b.dataset.g));
 });
 canvas.addEventListener('click', () => gesichtAktion(GESTEN[(Math.random() * GESTEN.length) | 0]));
 
+// 开关态同步到按钮样式
+function gesichtKnopfe() {
+  document.querySelectorAll('#gesichte button').forEach((b) => {
+    const g = b.dataset.g;
+    const an = g === gesichtForm || (blickZiel && ((g === 'links' && blickZiel.x < 0) || (g === 'rechts' && blickZiel.x > 0)));
+    b.classList.toggle('an', !!an);
+  });
+}
+
 // 调试钩子：无头验证用（每帧刷新的纯状态对象，读取无副作用）
-window.__avatar = { saat: 0, yaw: 0, wach: 1, plappertBis: 0, blinzeltBis: 0 };
+window.__avatar = { saat: 0, yaw: 0, wach: 1, plappertBis: 0, blinzeltBis: 0, gesicht: '' };
 function hookSync() {
   const h = window.__avatar;
   h.saat = saat; h.yaw = kopf.yaw; h.wach = kopf.wach;
   h.plappertBis = kopf.plappertBis; h.blinzeltBis = kopf.blinzeltBis;
+  h.gesicht = gesichtForm || '';
 }

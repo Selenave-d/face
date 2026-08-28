@@ -45,6 +45,7 @@
     padding: 6px 10px 5px 12px; cursor: pointer; user-select: none;
   }
   #gesichte button:hover { color: #2b2320; border-color: #2b2320; }
+  #gesichte button.an { color: #2e2839; border-style: solid; border-color: #2e2839; }
   /* 手机端：标题换行、导航收紧、按钮条折行、去双击缩放 */
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
@@ -72,9 +73,13 @@
 <div id="gesichte">
   <button data-g="sprich">说句话</button>
   <button data-g="blinz">眨眨眼</button>
+  <button data-g="froh">笑一笑</button>
+  <button data-g="boese">生气了</button>
+  <button data-g="traurig">难过了</button>
   <button data-g="muede">犯困了</button>
   <button data-g="links">看左边</button>
   <button data-g="rechts">看右边</button>
+  <button data-g="aufwachen">回 神</button>
 </div>
 <div id="leiste">
   <button id="neues">换 一 个</button>

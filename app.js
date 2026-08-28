@@ -2754,7 +2754,7 @@ function drawHead(ctx, head, t) {
   const groessen = messeGroessen(ctx3d, dna.layout);
   const haarInfo = { schale: cache.schale, kappe: cache.kappe, afro: cache.afro, dutt: cache.dutt };
   const mk = dna.merkmale;
-  const anim = { blickX: z.blickX, blickY: z.blickY, lider: z.lider, wach: z.wach, zeit: z.zeit, x: z.blickX, y: z.blickY, zwinkerSeite: dna.seite };
+  const anim = { blickX: z.blickX, blickY: z.blickY, lider: z.lider, wach: z.wach, zeit: z.zeit, x: z.blickX, y: z.blickY, zwinkerSeite: dna.seite, gesicht: head.gesicht ?? null };
 
   ctx.save();
   // 头随身体位移（走路/跳跃时全身一起动，脖子衔接不断）
@@ -2811,15 +2811,15 @@ function drawHead(ctx, head, t) {
   zeichneAugeKomplett(fernEintrag.seite, fernEintrag.feld, fernEintrag.u);
   drawNose(stift, feldAn(0, dna.layout.zonen.nase.v, ctx3d), groessen.nase, mk.nase, dna.pose.yaw >= 0 ? 1 : -1, pose.yaw, pal);
   zeichneAugeKomplett(nahEintrag.seite, nahEintrag.feld, nahEintrag.u);
-  drawMouth(stift, feldAn(0, dna.layout.mundV, ctx3d), groessen.mundBreit, groessen.mundHoch, mk.mund, pal, z.mund, z.wach, cache.herz);
+  drawMouth(stift, feldAn(0, dna.layout.mundV, ctx3d), groessen.mundBreit, groessen.mundHoch, (anim.gesicht && anim.gesicht.mund) || mk.mund, pal, z.mund, z.wach, cache.herz);
   function zeichneAugeKomplett(seite, feld, u) {
     const size = groessen.auge * dna.augenJitter[seite < 0 ? 0 : 1];
-    const zeichnen = () => drawEye(stift, feld, size, mk.auge, seite, anim, dna.pupille, pal, `auge${seite}`, cache.stern);
+    const zeichnen = () => drawEye(stift, feld, size, (anim.gesicht && anim.gesicht.auge) || mk.auge, seite, anim, dna.pupille, pal, `auge${seite}`, cache.stern);
     if (wangenAktiv && (cache.wange.beide || seite === dna.seite)) {
       drawEyeMitWange(ctx, stift, feld, size, mk.auge, seite, cache.wange, umriss, z.lider, pal, `wange${seite}`, zeichnen);
     } else zeichnen();
     const braueFeld = feldAn(u, dna.layout.braueV, ctx3d);
-    drawBrow(stift, braueFeld, size * 1.2, mk.braue, seite, z.wach, pal, `braue${seite}`);
+    drawBrow(stift, braueFeld, size * 1.2, (anim.gesicht && anim.gesicht.braue) || mk.braue, seite, z.wach, pal, `braue${seite}`);
   }
   // 12. 眼镜（在头发/帽子之前：镜圈上缘与镜腿根被刘海和帽檐自然盖住）
   if (mk.brille !== 'keine') {
