@@ -816,7 +816,7 @@ class Head {
     }
     // 偶尔自己做一个随机动作（只在站立时发起），做完回站立；
     // 一墙脸没有身体、一群人怕挤到邻居，都不发动
-    if (!WAND && !CROWD && this.akName === 'stand' && t > this.akAuto) {
+    if (!WAND && !CROWD && !CLIP && this.akName === 'stand' && t > this.akAuto) {
       const wahl = ['wave', 'walk', 'jump', 'dance'][Math.floor(this.wuerfel() * 4)];
       this.akAuto = t + 15 + this.wuerfel() * 15;
       this.setAktion(wahl, t, AKTIONEN[wahl].periode * (1.5 + this.wuerfel()));
@@ -2761,13 +2761,14 @@ function drawHead(ctx, head, t) {
   ctx.translate(head.cx + koerperPose.dx * mass, head.cy - z.wach * .05 * mass + koerperPose.dy * mass);
   ctx.scale(mass, mass);
 
-  // 1. 脖子（先画，身体会从下面盖住脖子根；单人模式服装有自己的领口，头的衣领关闭）
-  const hals = drawNeck(stift, dna, ctx3d, umriss, WAND ? mk.kragen : 'keiner', pal, WAND);
+  // 1. 脖子（先画，身体会从下面盖住脖子根；单人模式服装有自己的领口，头的衣领关闭；
+  //    一墙脸与剪报都是胸像：带肩块、不画身体）
+  const hals = drawNeck(stift, dna, ctx3d, umriss, (WAND || CLIP) ? mk.kragen : 'keiner', pal, WAND || CLIP);
   // 2. 后发 / 帽子后部 / 耳机后梁
   drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal);
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
-  // 2.5 身体：骨架链 + 动作姿态（一墙脸模式没有身体）
-  if (!WAND) drawBody(stift, dna, pal, hals, Math.sin(t * head.atemTempo + head.atemPhase), koerperPose);
+  // 2.5 身体：骨架链 + 动作姿态（一墙脸/剪报的胸像不画身体）
+  if (!WAND && !CLIP) drawBody(stift, dna, pal, hals, Math.sin(t * head.atemTempo + head.atemPhase), koerperPose);
   // 3. 耳朵（朝向我们的那只后画）
   const ohrL = feldAn(-1.48, dna.layout.ohrV, ctx3d);
   const ohrR = feldAn(1.48, dna.layout.ohrV, ctx3d);
@@ -2858,6 +2859,7 @@ const MODUS = typeof document !== 'undefined' ? document.body?.dataset?.modus : 
 const WAND = MODUS === 'wand';
 const FOTO = MODUS === 'foto';
 const CROWD = MODUS === 'crowd';
+const CLIP = MODUS === 'clip';
 
 const canvas = document.getElementById('blatt');
 const ctx = canvas.getContext('2d');
@@ -3009,7 +3011,7 @@ addEventListener('pointerleave', () => { pointer.active = false; });
 document.addEventListener('mouseleave', () => { pointer.active = false; });
 addEventListener('blur', () => { pointer.active = false; });
 
-if (!FOTO && !CROWD) {
+if (!FOTO && !CROWD && !CLIP) {
   addEventListener('resize', layout);
   document.getElementById('neues')?.addEventListener('click', reshuffle);
   // 一墙脸：点一颗头放大居中，再点（任意处）回到整墙
@@ -3033,13 +3035,13 @@ function waehleAktion(name) {
   heads[0].setAktion(name, performance.now() / 1000, 0);
 }
 document.querySelectorAll('.ak').forEach((b) => b.addEventListener('click', () => waehleAktion(b.dataset.ak)));
-if (!WAND && !FOTO && !CROWD) addEventListener('keydown', (e) => {
+if (!WAND && !FOTO && !CROWD && !CLIP) addEventListener('keydown', (e) => {
   const i = '12345'.indexOf(e.key);
   if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
 });
 
 // foto / crowd 模式到这里为止：纸纹与 papier() 留用，排版与主循环交给 photo.js / crowd.js
-if (FOTO || CROWD) {
+if (FOTO || CROWD || CLIP) {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   makeGrain();
 } else {
@@ -3061,7 +3063,7 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-if (!FOTO && !CROWD) {
+if (!FOTO && !CROWD && !CLIP) {
   makeGrain();
   requestAnimationFrame(frame);
 }
