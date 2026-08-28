@@ -23,10 +23,10 @@ let kopf = neuesKopf(saat);
 
 let uiStift = null, uiTick = -1;
 
-// 方形舞台：居中偏上，避开顶部标题与底部按钮
+// 方形舞台：居中偏上，避开顶部标题、动作行与底部按钮
 function buehne() {
-  const s = Math.min(innerWidth - 32, innerHeight - 200);
-  return { s, x: (innerWidth - s) / 2, y: Math.max(78, (innerHeight - 44 - s) / 2) };
+  const s = Math.min(innerWidth - 32, innerHeight - 216);
+  return { s, x: (innerWidth - s) / 2, y: Math.max(78, (innerHeight - 62 - s) / 2) };
 }
 
 function zeichneBuehne(t) {
@@ -83,9 +83,41 @@ function rahmen(now) {
   const dt = vorige ? Math.min(t - vorige, .05) : .016;
   vorige = t;
   kopf.update(dt, t, pointer);
+  gesichtTick(t);
+  hookSync();
   papier();
   zeichneBuehne(t);
   requestAnimationFrame(rahmen);
+}
+
+/* ================= 面部小动作（逗它） =================
+ * 直接覆写引擎的视线/眼皮/嘴部状态；动作结束后 update() 的弹簧自然把脸拉回日常。 */
+const aktion = {};
+
+function gesichtAktion(art) {
+  const t = performance.now() / 1000;
+  if (art === 'sprich') aktion.sprichBis = t + 1.5;
+  else if (art === 'blinz') aktion.blinzPlan = [t + .05, t + .45, t + .9];
+  else if (art === 'muede') aktion.muedeBis = t + 2.8;
+  else if (art === 'links' || art === 'rechts') {
+    aktion.blickBis = t + 2.2;
+    aktion.blickZiel = { x: art === 'links' ? -.55 : .55, y: 0 };
+  }
+}
+
+function gesichtTick(t) {
+  const qt = Math.floor(t * 12) / 12;
+  if (t < (aktion.sprichBis || 0)) kopf.plappertBis = qt + .12;
+  if (aktion.blinzPlan && aktion.blinzPlan.length && qt >= aktion.blinzPlan[0] - .02) {
+    kopf.blinzeltBis = qt + .14;
+    aktion.blinzPlan.shift();
+  }
+  if (t < (aktion.muedeBis || 0)) kopf.wach += (0.12 - kopf.wach) * .12;
+  if (t < (aktion.blickBis || 0)) {
+    kopf.yaw += (aktion.blickZiel.x - kopf.yaw) * .14;
+    kopf.pitch += (aktion.blickZiel.y - kopf.pitch) * .14;
+    kopf.blickX += (aktion.blickZiel.x * 1.6 - kopf.blickX) * .2;
+  }
 }
 
 function resize() {
@@ -113,3 +145,18 @@ document.getElementById('speicher').addEventListener('click', () => {
   a.download = `papier-avatar-${saat}.png`;
   a.click();
 });
+
+// 逗它：按钮触发，点画布（戳脸）随机来一个
+const GESTEN = ['sprich', 'blinz', 'muede', 'links', 'rechts'];
+document.querySelectorAll('#gesichte button').forEach((b) => {
+  b.addEventListener('click', () => gesichtAktion(b.dataset.g));
+});
+canvas.addEventListener('click', () => gesichtAktion(GESTEN[(Math.random() * GESTEN.length) | 0]));
+
+// 调试钩子：无头验证用（每帧刷新的纯状态对象，读取无副作用）
+window.__avatar = { saat: 0, yaw: 0, wach: 1, plappertBis: 0, blinzeltBis: 0 };
+function hookSync() {
+  const h = window.__avatar;
+  h.saat = saat; h.yaw = kopf.yaw; h.wach = kopf.wach;
+  h.plappertBis = kopf.plappertBis; h.blinzeltBis = kopf.blinzeltBis;
+}

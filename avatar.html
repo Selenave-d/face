@@ -35,6 +35,16 @@
     padding: 9px 18px 8px 21px; cursor: pointer; user-select: none;
   }
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
+  #gesichte {
+    position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%);
+    display: flex; gap: 6px; align-items: center;
+  }
+  #gesichte button {
+    font: 11px/1 "Courier New", monospace; letter-spacing: 2px; color: #a89f93;
+    background: transparent; border: 1px dashed #c9c1b5; border-radius: 999px;
+    padding: 6px 10px 5px 12px; cursor: pointer; user-select: none;
+  }
+  #gesichte button:hover { color: #2b2320; border-color: #2b2320; }
   /* 手机端：标题换行、导航收紧、按钮条折行、去双击缩放 */
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
@@ -44,6 +54,8 @@
     .sprung a { padding: 3px 0; }
     #leiste { flex-wrap: wrap; justify-content: center; width: calc(100vw - 24px); gap: 6px; bottom: 10px; }
     #leiste button { font-size: 11px; letter-spacing: 2px; padding: 8px 12px 7px 14px; }
+    #gesichte { bottom: 58px; flex-wrap: wrap; justify-content: center; width: calc(100vw - 24px); }
+    #gesichte button { font-size: 10px; padding: 5px 8px 4px 10px; }
   }
 </style>
 </head>
@@ -56,6 +68,13 @@
   <a href="crowd.html">来一群朋友 →</a>
   <a href="photo.html">拍合影 →</a>
   <a href="clip.html">剪报一张 →</a>
+</div>
+<div id="gesichte">
+  <button data-g="sprich">说句话</button>
+  <button data-g="blinz">眨眨眼</button>
+  <button data-g="muede">犯困了</button>
+  <button data-g="links">看左边</button>
+  <button data-g="rechts">看右边</button>
 </div>
 <div id="leiste">
   <button id="neues">换 一 个</button>
