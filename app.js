@@ -2816,7 +2816,7 @@ function drawHead(ctx, head, t) {
     const size = groessen.auge * dna.augenJitter[seite < 0 ? 0 : 1];
     const zeichnen = () => drawEye(stift, feld, size, (anim.gesicht && anim.gesicht.auge) || mk.auge, seite, anim, dna.pupille, pal, `auge${seite}`, cache.stern);
     if (wangenAktiv && (cache.wange.beide || seite === dna.seite)) {
-      drawEyeMitWange(ctx, stift, feld, size, mk.auge, seite, cache.wange, umriss, z.lider, pal, `wange${seite}`, zeichnen);
+      drawEyeMitWange(ctx, stift, feld, size, (anim.gesicht && anim.gesicht.auge) || mk.auge, seite, cache.wange, umriss, z.lider, pal, `wange${seite}`, zeichnen);
     } else zeichnen();
     const braueFeld = feldAn(u, dna.layout.braueV, ctx3d);
     drawBrow(stift, braueFeld, size * 1.2, (anim.gesicht && anim.gesicht.braue) || mk.braue, seite, z.wach, pal, `braue${seite}`);

@@ -33,11 +33,10 @@ const TITEL_FORM = [
   (name) => `有人见过${name}吗`,
   (name) => `寻找爱笑的${name}`,
 ];
-const SATZ_ANFANG = ['据本报通讯员目击', '纸面街多位居民称', '据铅笔巷消息人士透露', '本报讯'];
+const SATZ_ANFANG = ['本报讯', '通讯员称', '消息人士称', '居民称'];
 const SATZ_MITTE = [
-  '昨日午后在纸面街一带连续挥手三次', '在斑马线上跳了一整段舞', '把橡皮屑堆成了一座小山',
-  '对着复印机看了很久很久', '用铅笔画了一条非常直的线', '踩着影子一路小跑',
-  '把自己的名字写在了起雾的玻璃上', '安静地看完了一整张报纸',
+  '昨日午后连续挥手三次', '在斑马线上跳舞', '把橡皮屑堆成小山', '对着复印机看了很久',
+  '画了一条很直的线', '踩着影子一路小跑', '在玻璃上写了名字', '安静看完一张报纸',
 ];
 const SATZ_ENDE = ['，引发围观。', '，场面一度十分可爱。', '，本报将持续关注。', '，目前纸面平静。'];
 const LOHN = ['悬赏：水果糖叁颗', '悬赏：橡皮半块', '悬赏：贴纸两张', '酬谢：瓜子一把'];
@@ -84,7 +83,7 @@ function zeichneBlatt(t) {
   const p = W * .07;   // 版心边距
 
   // 撕纸边：外缘锯齿的多边形，填一层比纸面略亮的纸色，剪报是从报纸上撕下来的
-  const rissKey = `${saat}|${Math.round(W)}|${Math.round(H)}`;
+  const rissKey = `${saat}|${Math.round(W)}|${Math.round(H)}|${Math.round(P)}|${Math.round(Q)}`;
   if (rissMemo.key !== rissKey) {
     const rand = strom(saat, 'riss');
     const esa = 3.2, es = W * .022;
@@ -169,7 +168,7 @@ function zeichneBlatt(t) {
   const zeilenH = W * .05;
   const passt = Math.max(2, Math.floor(spaltenH / zeilenH));
   ctx.save();
-  ctx.font = `${Math.round(W * .026)}px "Courier New", monospace`;
+  ctx.font = `${Math.round(W * .024)}px "Courier New", monospace`;
   ctx.fillStyle = '#6f6a63';
   ctx.textBaseline = 'top';
   for (let i = 0; i < passt; i++) {
@@ -230,14 +229,16 @@ document.getElementById('neues').addEventListener('click', () => {
   try { history.replaceState(null, '', '?seed=' + saat); } catch (e) { /* file:// 可能拒绝 */ }
 });
 
-// 存图片：把剪报区域从主画布裁出导出 PNG（零依赖）
+// 存图片：把剪报区域从主画布裁出导出 PNG（零依赖）；四周外扩一点，撕纸边完整入图
 document.getElementById('speicher').addEventListener('click', () => {
   const g = blattGeometrie();
+  const ex = Math.max(0, g.x - g.w * .03), ey = Math.max(0, g.y - g.w * .03);
+  const ew = Math.min(innerWidth - ex, g.w * 1.06), eh = Math.min(innerHeight - ey, g.h + g.w * .06);
   const out = document.createElement('canvas');
-  out.width = Math.round(g.w * 2);
-  out.height = Math.round(g.h * 2);
+  out.width = Math.round(ew * 2);
+  out.height = Math.round(eh * 2);
   const oc = out.getContext('2d');
-  oc.drawImage(canvas, g.x * dpr, g.y * dpr, g.w * dpr, g.h * dpr, 0, 0, out.width, out.height);
+  oc.drawImage(canvas, ex * dpr, ey * dpr, ew * dpr, eh * dpr, 0, 0, out.width, out.height);
   out.toBlob((blob) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

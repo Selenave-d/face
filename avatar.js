@@ -23,10 +23,11 @@ let kopf = neuesKopf(saat);
 
 let uiStift = null, uiTick = -1;
 
-// 方形舞台：居中偏上，避开顶部标题、动作行与底部按钮
+// 方形舞台：居中偏上，避开顶部标题（手机端导航更高，多让）、动作行与底部按钮
 function buehne() {
-  const s = Math.min(innerWidth - 32, innerHeight - 216);
-  return { s, x: (innerWidth - s) / 2, y: Math.max(78, (innerHeight - 62 - s) / 2) };
+  const s = Math.max(120, Math.min(innerWidth - 32, innerHeight - 216));
+  const yMin = innerWidth < 720 ? 150 : 78;
+  return { s, x: (innerWidth - s) / 2, y: Math.max(yMin, (innerHeight - 62 - s) / 2) };
 }
 
 function zeichneBuehne(t) {
@@ -62,12 +63,15 @@ function avatarPNG() {
   // 笔闭包绑 ctx：离屏渲染前作废旧笔；渲染后同样作废，主画布下一帧重绑
   kopf.cache.stift = null; kopf.cache.stiftTick = -1; kopf.cache.stiftMass = -1;
   const cx0 = kopf.cx, cy0 = kopf.cy, mass0 = kopf.mass;
+  const blinz0 = kopf.blinzeltBis, plapp0 = kopf.plappertBis;
+  kopf.blinzeltBis = 0; kopf.plappertBis = 0;   // 快照不拍眨眼/嘟嘴的瞬间
   kopf.mass = PX / (bedarf.oben + 2.25);
   kopf.cx = PX / 2;
   kopf.cy = bedarf.oben * kopf.mass + PX * .07;
   drawHead(oc, kopf, performance.now() / 1000);
   kopf.cx = cx0; kopf.cy = cy0; kopf.mass = mass0;
-  kopf.cache.stiftTick = -1; kopf.cache.stiftMass = -1;
+  kopf.blinzeltBis = blinz0; kopf.plappertBis = plapp0;
+  kopf.cache.stift = null; kopf.cache.stiftTick = -1; kopf.cache.stiftMass = -1;
   return out.toDataURL('image/png');
 }
 
@@ -133,7 +137,6 @@ function gesichtTick(t) {
     kopf.blinzeltBis = qt + .14;
     einmal.blinzPlan.shift();
   }
-  if (gesichtForm === 'muede') kopf.wach += (.12 - kopf.wach) * .12;
   if (blickZiel) {
     kopf.yaw += (blickZiel.x - kopf.yaw) * .14;
     kopf.pitch += (blickZiel.y - kopf.pitch) * .14;
@@ -156,12 +159,14 @@ setTimeout(frisch, 100);   // 首帧画完再导出
 document.getElementById('neues').addEventListener('click', () => {
   kopf = neuesKopf((Math.random() * 1e9) | 0);
   gesichtForm = null; blickZiel = null;   // 新人不继承旧表情
+  einmal.sprichBis = 0; einmal.blinzPlan = null;   // 也不继承旧演出
   try { history.replaceState(null, '', '?seed=' + saat); } catch (e) { /* file:// 可能拒绝 */ }
   setTimeout(frisch, 100);
 });
 
 document.getElementById('speicher').addEventListener('click', () => {
-  const url = window.__avatarPNG || avatarPNG();
+  const url = avatarPNG();          // 永远现算：不吃可能过期的延迟快照
+  window.__avatarPNG = url;
   const a = document.createElement('a');
   a.href = url;
   a.download = `papier-avatar-${saat}.png`;
@@ -170,18 +175,19 @@ document.getElementById('speicher').addEventListener('click', () => {
 
 // 逗它：按钮触发（表情/视线为开关，主按钮样式的「回神」清空），点画布随机来一个
 const GESTEN = ['sprich', 'blinz', 'froh', 'boese', 'traurig', 'muede', 'links', 'rechts'];
-document.querySelectorAll('#gesichte button').forEach((b) => {
+const gesichtKnopfListe = [...document.querySelectorAll('#gesichte button')];
+gesichtKnopfListe.forEach((b) => {
   b.addEventListener('click', () => gesichtAktion(b.dataset.g));
 });
 canvas.addEventListener('click', () => gesichtAktion(GESTEN[(Math.random() * GESTEN.length) | 0]));
 
-// 开关态同步到按钮样式
+// 开关态同步到按钮样式（按钮列表已缓存，不每帧查询）
 function gesichtKnopfe() {
-  document.querySelectorAll('#gesichte button').forEach((b) => {
+  for (const b of gesichtKnopfListe) {
     const g = b.dataset.g;
     const an = g === gesichtForm || (blickZiel && ((g === 'links' && blickZiel.x < 0) || (g === 'rechts' && blickZiel.x > 0)));
     b.classList.toggle('an', !!an);
-  });
+  }
 }
 
 // 调试钩子：无头验证用（每帧刷新的纯状态对象，读取无副作用）
