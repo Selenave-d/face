@@ -310,6 +310,38 @@ function raketenZeichnen(t) {
   }
 }
 
+/* ================= 头部精灵缓存 =================
+ * 一个人一张离屏画布：key 按 12fps 换帧（眨眼/嘟囔/动作过渡期间升到 24fps），
+ * 48 人 × 60fps 的全量重算（颅骨点云投影 + 全部笔画）压成 miss 时才算，其余帧 drawImage。
+ * 关键正确性：笔（stift）闭包绑着创建它的 ctx，离屏渲染前必须废弃旧笔。 */
+function kopfSprite(h, p, t, namenAn) {
+  const qt = Math.floor(t * 12) / 12;
+  const schnell = (h.plappertBis > t || h.akVon || h.blinzeltBis > qt) ? 2 : 1;
+  const key = `${Math.floor(t * 12 * schnell)}|${h.akName}|${namenAn ? 1 : 0}|${Math.round(p.mass * 10)}`;
+  let sp = h.sprite;
+  if (sp && sp.key === key) return sp;
+  const sdpr = Math.min(dpr, p.reihe < 3 ? 1.25 : 1.75);   // 后排小精灵省显存
+  const oben = raumBedarf(h).oben;
+  const W = p.mass * 4.4;                    // 横向最远：挥手 ±2.4 / 帽檐 ±2.1，取保守值
+  const H = (oben + fussWelt(h) + 1.55) * p.mass;   // 头顶余量 + 全身 + 脚下名字
+  if (!sp) sp = h.sprite = { cv: document.createElement('canvas') };
+  sp.key = key;
+  sp.w = W; sp.h = H;
+  sp.topY = h.cy - (oben + .95) * p.mass;    // 画布顶在屏幕上的 y（头顶余量含跳跃上抛）
+  const pw = Math.max(1, Math.ceil(W * sdpr)), ph = Math.max(1, Math.ceil(H * sdpr));
+  if (sp.cv.width !== pw || sp.cv.height !== ph) { sp.cv.width = pw; sp.cv.height = ph; }
+  const cc = sp.cv.getContext('2d');
+  cc.setTransform(sdpr, 0, 0, sdpr, 0, 0);
+  cc.clearRect(0, 0, W, H);
+  h.cache.stift = null; h.cache.stiftTick = -1; h.cache.stiftMass = -1;   // 换笔：笔绑着旧 ctx
+  const proxy = Object.create(h);            // 只喂给 drawHead，绝不进 update()
+  proxy.cx = W / 2;
+  proxy.cy = h.cy - sp.topY;
+  proxy.nameY = h.nameY - sp.topY;           // 名字是屏幕绝对坐标，换算进画布
+  drawHead(cc, proxy, t);
+  return sp;
+}
+
 /* ================= 主循环 ================= */
 
 let vorige = 0;
@@ -358,7 +390,9 @@ function rahmen(now) {
         { x: p.x + (fo + .1) * p.mass * schrumpf, y: p.bodenY + 3 + f },
       ], { spur: `schatten${i}-${f}`, w: 1, deckung: .22 * schrumpf, eckig: true });
     }
-    drawHead(ctx, h, t);
+    // 精灵缓存命中即贴图；未命中才整颗头重画（12fps 换帧，翻书感不变）
+    const sp = kopfSprite(h, p, t, namenAn);
+    ctx.drawImage(sp.cv, Math.round(p.x - sp.w / 2), Math.round(sp.topY), sp.w, sp.h);
     ctx.globalAlpha = 1;
   }
   raketenZeichnen(t);
