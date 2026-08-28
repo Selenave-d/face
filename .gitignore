@@ -1,2 +1,4 @@
 # 原作参考材料（第三方代码与截图，不入库）
 _orig/
+# 自动化生成的头像产物（paper-avatar skill 输出目录）
+.avatars/
