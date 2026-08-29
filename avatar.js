@@ -100,12 +100,7 @@ function rahmen(now) {
  * 说话/眨眼是一次性小演出。
  * 表情 = 覆写引擎的五官选型（head.gesicht，app.js 的 drawHead 会读）；
  * 视线/犯困 = 每帧在 update() 之后覆写状态，回神后由引擎弹簧自然拉回。 */
-const GESICHT_FORMEN = {
-  froh: { auge: 'froh', mund: 'laecheln' },
-  boese: { braue: 'schraeg', mund: 'zickzack' },
-  traurig: { braue: 'sorge', mund: 'welle' },
-  muede: { auge: 'schlaefrig' },
-};
+/* 表情表 GESICHT_FORMEN 由 app.js 提供（头像页与一墙脸放大视图共用） */
 let gesichtForm = null;    // 当前持续表情（null = 日常）
 let blickZiel = null;      // 当前持续视线（null = 自在张望）
 

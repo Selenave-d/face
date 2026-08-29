@@ -575,6 +575,14 @@ const BART_W = [['keiner', 30], ['stoppeln', .8], ['schnauz', .4], ['stoppelschn
 // 雀斑少见，红晕清淡地保留
 const BACKE_W = [['keine', 2.4], ['rosig', 3], ['punkte', 1.2], ['sommersprossen', .6]];
 const BRAUE_W = [['keine', 2], ['duenn', 2], ['dick', 1.2], ['hoch', 1.2], ['schraeg', 1], ['sorge', .8]];
+// 表情表：头像页与一墙脸放大视图共用（drawHead 按 head.gesicht 覆写五官选型）
+const GESICHT_FORMEN = {
+  froh: { auge: 'froh', mund: 'laecheln' },
+  boese: { braue: 'schraeg', mund: 'zickzack' },
+  traurig: { braue: 'sorge', mund: 'welle' },
+  muede: { auge: 'schlaefrig' },
+};
+const GESICHT_FOLGE = ['', 'froh', 'boese', 'traurig', 'muede'];   // 循环顺序：日常→笑→怒→难过→困
 const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2]];
 const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4]];
 const ZIERRAT_W = [['keiner', 7], ['ohrring', 1.2], ['pflaster', .8]];
@@ -2999,6 +3007,7 @@ function layout() {
 
 function reshuffle() {
   baseSeed = Math.floor(Math.random() * 1e9);
+  vergroessert = -1;   // 换版回整墙（放大索引指向的头已不存在）
   heads = [];
   layout();
   try { history.replaceState(null, '', '?seed=' + baseSeed); } catch (e) { /* file:// 等环境可能拒绝改 query */ }
@@ -3015,16 +3024,37 @@ addEventListener('blur', () => { pointer.active = false; });
 if (!FOTO && !CROWD && !CLIP && !AVATAR) {
   addEventListener('resize', layout);
   document.getElementById('neues')?.addEventListener('click', reshuffle);
-  // 一墙脸：点一颗头放大居中，再点（任意处）回到整墙
+  // 一墙脸：点一颗头放大居中；放大后点脸循环换表情、点空白处回整墙
   if (WAND) canvas.addEventListener('click', (e) => {
-    if (vergroessert >= 0) { vergroessert = -1; layout(); return; }
+    // 命中按各头帽子/发量外扩（帽檐宽、afro 高也算"这颗头"）
+    const trifft = (h) => {
+      const b = raumBedarf(h);
+      const dx = (e.clientX - h.cx) / h.mass, dy = (e.clientY - h.cy) / h.mass;
+      return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < 1.35 && dy > -b.oben * 1.05;
+    };
+    if (vergroessert >= 0) {
+      const head = heads[vergroessert];
+      if (head && trifft(head)) {
+        const idx = GESICHT_FOLGE.findIndex((g) => g && head.gesicht === GESICHT_FORMEN[g]);
+        const next = idx >= 0 ? (idx + 1) % GESICHT_FOLGE.length : 1;
+        head.gesicht = GESICHT_FOLGE[next] ? GESICHT_FORMEN[GESICHT_FOLGE[next]] : null;
+      } else {
+        if (head) head.gesicht = null;   // 整墙是中性合影，退出时清表情
+        vergroessert = -1;
+        layout();
+      }
+      return;
+    }
     let best = -1, bestD = 1e9;
     heads.forEach((h, i) => {
+      if (!trifft(h)) return;
       const d = Math.hypot(e.clientX - h.cx, e.clientY - h.cy) / h.mass;
-      if (d < 1.3 && d < bestD) { bestD = d; best = i; }
+      if (d < bestD) { bestD = d; best = i; }
     });
-    if (best >= 0) { vergroessert = best; layout(); }
+    if (best >= 0) { vergroessert = best; heads[best].gesicht = null; layout(); }
   });
+  // 调试钩子：无头验证用（每帧刷新的纯状态对象）
+  if (WAND) window.__wand = { vergroessert: -1, gesichtKey: '' };
 }
 
 // 动作按钮与键盘 1-5（只单人模式有）
@@ -3037,6 +3067,7 @@ function waehleAktion(name) {
 }
 document.querySelectorAll('.ak').forEach((b) => b.addEventListener('click', () => waehleAktion(b.dataset.ak)));
 if (!WAND && !FOTO && !CROWD && !CLIP && !AVATAR) addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;   // 浏览器快捷键（Ctrl+1 切标签等）不触发动作
   const i = '12345'.indexOf(e.key);
   if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
 });
@@ -3061,6 +3092,12 @@ function frame(now) {
   for (const head of zuZeichnen) {
     head.update(dt, t, pointer);
     drawHead(ctx, head, t);
+  }
+  if (WAND && window.__wand) {
+    window.__wand.vergroessert = vergroessert;
+    window.__wand.gesichtKey = vergroessert >= 0 && heads[vergroessert]
+      ? (GESICHT_FOLGE.find((g) => g && heads[vergroessert].gesicht === GESICHT_FORMEN[g]) ?? '')
+      : '';
   }
   requestAnimationFrame(frame);
 }
