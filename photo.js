@@ -269,6 +269,7 @@ function waehle(kind, t) {
 
 canvas.addEventListener('click', (e) => {
   const t = performance.now() / 1000;
+  if (klickSperre) { klickSperre = false; return; }   // 长按逗完表情，吞掉这次 click
   if (phase === 'draft') {           // 二选一期间点选孩子无效
     const i = karteBei(e.clientX, e.clientY);
     if (i >= 0) draftPick(i, t);
@@ -277,6 +278,31 @@ canvas.addEventListener('click', (e) => {
   if (phase !== 'idle') return;
   waehle(kindBei(e.clientX, e.clientY), t);
 });
+
+/* 长按逗一下：按住一个孩子 ~0.4s 循环换表情（单击仍是选择/取消，互不干扰） */
+const FOLGE = ['ruhig', 'froh', 'boese', 'angst', 'weint', 'schlaeft'];
+let klickSperre = false;
+let druckTimer = 0;
+canvas.addEventListener('pointerdown', (e) => {
+  klickSperre = false;
+  if (phase !== 'idle') return;
+  const kind = kindBei(e.clientX, e.clientY);
+  if (!kind) return;
+  clearTimeout(druckTimer);
+  druckTimer = setTimeout(() => {
+    if (phase !== 'idle') return;
+    klickSperre = true;
+    kind.laune = null;                     // 手动表情优先，压过自动小情绪
+    const i = FOLGE.indexOf(kind.face);
+    kind.face = FOLGE[(i >= 0 ? i + 1 : 1) % FOLGE.length];
+    kind.hopT = performance.now() / 1000;  // 换表情小跳一下：输入要有即时可见反馈
+    kind.hopAmp = .2;
+  }, 400);
+});
+const druckEnde = () => clearTimeout(druckTimer);
+canvas.addEventListener('pointerup', druckEnde, { passive: true });
+canvas.addEventListener('pointerleave', druckEnde, { passive: true });
+canvas.addEventListener('pointercancel', druckEnde, { passive: true });
 
 /* ================= 拍合影过场 ================= */
 
@@ -452,6 +478,11 @@ function zeichneGesamt() {
   ctx.fillStyle = '#7a7268';
   // 手机端总分上移一点，避开换行后的标题
   ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, innerWidth < 720 ? 74 : 64);
+  // 长按逗表情的小提示（只在待机时显示，放在孩子头顶上方的空白带）
+  if (phase === 'idle') {
+    ctx.fillStyle = '#a89f93';
+    ctx.fillText('长按孩子 逗一下表情', innerWidth / 2, 170);
+  }
   ctx.restore();
 }
 
@@ -699,6 +730,7 @@ window.__foto = {
   waehle: (i) => waehle(kinder[i], performance.now() / 1000),
   knips: () => knips(performance.now() / 1000),
   kinder: () => kinder.map((k) => ({ platz: k.platz, zustand: k.zustand, name: k.name, art: k.rec.art, media: k.rec.media })),
+  gesichter: () => kinder.map((k) => k.face).join(','),
   phase: () => phase,
   _kinder: kinder,              // 测试用：可直接改 rec.media / face
   draft: () => draftStart(performance.now() / 1000),   // 强制弹出二选一

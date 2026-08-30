@@ -4,4 +4,3 @@
 
 1. 去重：doodle.js / app.js 两套 RNG 与笔引擎、三页复制的标题 CSS
 2. 新玩法候选：冲洗合影贴纸（photo 页拍照后右下角贴纸照片）、墨水孩子离场留渍
-3. photo 页（doodle.js 有独立 face 系统）给合影角色加点击换表情
