@@ -322,6 +322,9 @@ let draftZaehler = 0;
  * 最多叠三张当成绩册——旧的垫在下面，越旧越偏越淡。 */
 const abzuege = [];           // { recs: [...5], titel }
 
+/* 墨渍：墨水介质的孩子离场时，在站过的架子上留一片渐渐变淡的墨渍（墙上的记忆） */
+const mauernFlecken = [];     // { x, y, seed, von }
+
 function machRequisit() {
   const r = strom((klassenSeed * 7 + ++draftZaehler * 7919) | 0, 'requisit');
   // 未拥有的家族优先；全齐了就随便来（收下时会替换最旧）
@@ -386,7 +389,14 @@ function phaseTick(t) {
     draft.umgesetzt = true;
     phase = 'raus';
     rausBeginn = t;
-    for (const i of gewaehlt) { kinder[i].zustand = 'geht'; kinder[i].seit = t; kinder[i].face = 'weint'; }
+    for (const i of gewaehlt) {
+      const kind = kinder[i];
+      kind.zustand = 'geht'; kind.seit = t; kind.face = 'weint';
+      if (kind.rec.media === 'ink') {   // 墨水孩子走的时候渗一片墨渍在架子上
+        mauernFlecken.push({ x: kind.x, y: kind.footY - kind.k * .15, seed: kind.rec.seed, von: t });   // .15k：下缘吻住架子线
+        if (mauernFlecken.length > 8) mauernFlecken.shift();
+      }
+    }
   }
   if (phase === 'raus' && t - rausBeginn > .7 && !rausFertig) {
     rausFertig = true;
@@ -597,6 +607,26 @@ function zeichneDraft(t) {
   }
 }
 
+// 墨渍：两三个交叠的歪圆，形状随种子定死（干了的墨不再沸腾），24 秒内慢慢淡去
+function zeichneMauernFlecken(t) {
+  for (let i = mauernFlecken.length - 1; i >= 0; i--) {
+    const f = mauernFlecken[i];
+    const alter = t - f.von;
+    if (alter > 24) { mauernFlecken.splice(i, 1); continue; }
+    const alpha = .26 * (1 - alter / 24);
+    ctx.save();
+    for (const [dx, dy, r] of [[0, 0, 16], [10, 6, 9], [-9, 8, 7]]) {
+      const pts = kreisPts(f.x + dx, f.y + dy, r, r * .8, 12, .22, f.seed + dx);
+      ctx.beginPath();
+      pts.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      ctx.closePath();
+      ctx.fillStyle = `rgba(42,38,32,${alpha})`;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
 // 冲洗合影：右下角的贴纸照片堆（最新的在最上，旧的垫底偏移淡出）
 function zeichneAbzuege(t) {
   const n = abzuege.length;
@@ -708,6 +738,7 @@ function rahmen(now) {
 
   papier();
   regale(t);
+  zeichneMauernFlecken(t);   // 墨渍在墙上：贴纸之前、孩子们最后
   zeichneAbzuege(t);   // 贴纸照片贴在墙上：画在孩子们后面，人挡住贴纸而不是贴纸挡人
 
   // 后排先画（前排压住后排的脚，深度自然）
@@ -792,5 +823,6 @@ window.__foto = {
   pickDraft: (i) => draftPick(i, performance.now() / 1000),
   besitz: () => besitz.map((b) => b.familie),
   abzuege: () => abzuege.length,
+  flecken: () => mauernFlecken.length,
   filter,
 };
