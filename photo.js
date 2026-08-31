@@ -318,6 +318,10 @@ const besitz = [];
 let draft = null;             // { items:[a,b], seit, wahl, wahlT, umgesetzt }
 let draftZaehler = 0;
 
+/* 冲洗合影：拍照后在右下角留一张贴纸照片（五人小合影 + 牌型标题），
+ * 最多叠三张当成绩册——旧的垫在下面，越旧越偏越淡。 */
+const abzuege = [];           // { recs: [...5], titel }
+
 function machRequisit() {
   const r = strom((klassenSeed * 7 + ++draftZaehler * 7919) | 0, 'requisit');
   // 未拥有的家族优先；全齐了就随便来（收下时会替换最旧）
@@ -345,6 +349,9 @@ function knips(t) {
   ergebnis = besteHand([...gewaehlt].map((i) => kinder[i]), besitz);
   gesamt += ergebnis.punkte;
   bannerBis = t + 2;
+  // 冲洗一张贴纸照片：记住这五个人和牌型
+  abzuege.push({ recs: [...gewaehlt].map((i) => kinder[i].rec), titel: ergebnis.name });
+  if (abzuege.length > 3) abzuege.shift();
   phase = 'sprung';
   sprungT = t;
   rausFertig = false;
@@ -590,6 +597,53 @@ function zeichneDraft(t) {
   }
 }
 
+// 冲洗合影：右下角的贴纸照片堆（最新的在最上，旧的垫底偏移淡出）
+function zeichneAbzuege(t) {
+  const n = abzuege.length;
+  if (!n) return;
+  const st = requisitStift(t);
+  const mob = innerWidth < 720;
+  const w = mob ? 150 : 178, band = mob ? 22 : 28, h = w * .72 + band;
+  abzuege.forEach((ab, idx) => {
+    const rang = n - 1 - idx;   // 0 = 最新最上；旧的往左下垫，不出屏
+    const x = innerWidth - w - (mob ? 10 : 26) - rang * 9;
+    const y = (mob ? innerHeight - h - 168 : innerHeight - h - 60) + rang * 9;
+    ctx.save();
+    if (rang) ctx.globalAlpha = .55;
+    ctx.translate(x + w / 2, y + h / 2);
+    ctx.rotate((idx % 2 ? -1 : 1) * (.025 + rang * .01));
+    ctx.translate(-w / 2, -h / 2);
+    // 照片纸：暖白 + 四边手绘细线
+    ctx.fillStyle = 'rgba(251,248,241,.96)';
+    ctx.fillRect(0, 0, w, h - band + 4);
+    st.line([[8, 0], [w - 8, 0]], 1, { label: 340 + idx * 7, alpha: .5 });
+    st.line([[8, h - band + 4], [w - 8, h - band + 4]], 1, { label: 341 + idx * 7, alpha: .5 });
+    st.line([[0, 8], [0, h - band - 4]], 1, { label: 342 + idx * 7, alpha: .5 });
+    st.line([[w, 8], [w, h - band - 4]], 1, { label: 343 + idx * 7, alpha: .5 });
+    // 五人小合影：一排站着，还在轻轻呼吸；微型尺寸走扁平上色
+    const kK = (w - 20) / 5 * .78;
+    const fussY = h - band - 6;
+    ab.recs.forEach((rec, i) => {
+      drawDoodle(ctx, rec, 12 + (w - 24) * (i + .5) / 5, fussY, kK, t, { face: 'froh', flach: true });
+    });
+    // 底边白带上手写牌型
+    ctx.font = `${mob ? 9 : 10}px "Kaiti", "STKaiti", "楷体", serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8b8894';
+    ctx.fillText(ab.titel, w / 2, h - band / 2 + 1);
+    // 顶角两片胶带
+    ctx.fillStyle = 'rgba(214,203,182,.55)';
+    ctx.save();
+    ctx.translate(12, 2); ctx.rotate(-.35); ctx.fillRect(-10, -5, 26, 11);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(w - 12, 2); ctx.rotate(.35); ctx.fillRect(-16, -5, 26, 11);
+    ctx.restore();
+    ctx.restore();
+  });
+}
+
 // 拍照快门：白闪一帧
 function zeichneBlitz(t) {
   if (!sprungT || phase === 'idle') return;
@@ -654,6 +708,7 @@ function rahmen(now) {
 
   papier();
   regale(t);
+  zeichneAbzuege(t);   // 贴纸照片贴在墙上：画在孩子们后面，人挡住贴纸而不是贴纸挡人
 
   // 后排先画（前排压住后排的脚，深度自然）
   const geordnet = [...kinder].sort((a, b) => (a.g.hinten ? 0 : 1) - (b.g.hinten ? 0 : 1));
@@ -736,5 +791,6 @@ window.__foto = {
   draft: () => draftStart(performance.now() / 1000),   // 强制弹出二选一
   pickDraft: (i) => draftPick(i, performance.now() / 1000),
   besitz: () => besitz.map((b) => b.familie),
+  abzuege: () => abzuege.length,
   filter,
 };

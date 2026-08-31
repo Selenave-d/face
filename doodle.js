@@ -350,8 +350,15 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     }
   }
   /* —— 原语 tone：填块（斑点、发盖、耳朵等局部色） —— */
+  let flachModus = false;   // 微型尺寸（贴纸照片等）：排线间距亚像素会糊成实心，改一次平涂
   function tone(pts, opt = {}) {
     const dunkel = !!opt.dunkel;
+    if (flachModus) {
+      ctx.save(); poly(pts);
+      ctx.fillStyle = `rgba(${M.farbe},${dunkel ? .5 : .18})`;
+      ctx.fill(); ctx.restore();
+      return;
+    }
     if (!istWash) {
       // 排线角度按部件 label 错开 ±.3rad，不再全图一个方向
       const wk = opt.winkel ?? (-.9 + (((opt.label ?? 9) % 3) - 1) * .3);
@@ -363,6 +370,14 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
   }
   /* —— 原语 haut：头与身体的处理 —— */
   function haut(pts, dunkel, opt = {}) {
+    if (flachModus) {   // 微型深色一次平涂，浅色留纸白
+      if (dunkel) {
+        ctx.save(); poly(pts);
+        ctx.fillStyle = `rgba(${M.farbe},.5)`;
+        ctx.fill(); ctx.restore();
+      }
+      return;
+    }
     const wk = opt.winkel ?? -.9;
     if (dunkel) {
       if (istWash) {
@@ -376,7 +391,7 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     // 浅色角色：水彩给一层淡淡的个人色调，其余留纸白
     if (mediaId === 'watercolour') wash(pts, washRGB, .22, 13);
   }
-  return { line, dot, paperDot, poly, hatch, wash, tone, haut, washRGB, istWash };
+  return { line, dot, paperDot, poly, hatch, wash, tone, haut, washRGB, istWash, flach: (an) => { flachModus = !!an; } };
 }
 
 /* ================= 部件画法 ================= */
@@ -1024,6 +1039,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   const tick = Math.floor(t * 8);
   const qt = Math.floor(t * 12) / 12;
   const stift = bleiStift(ctx, _h2(rec.seed, tick), rec.media, rec.farbe);
+  stift.flach(!!anim.flach);   // 微型尺寸（贴纸照片）走扁平上色，排线不糊不费
   const bob = Math.sin(qt * 2.2 * rec.anim.tempo + rec.anim.phase) * .018 * k;
   const wag = Math.sin(qt * 5 + rec.anim.phase);
   const kopf = kopfPoly(rec, k);
