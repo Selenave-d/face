@@ -24,11 +24,12 @@
     user-select: none; pointer-events: none;
   }
   .sprung {
-    position: fixed; top: 30px; right: 34px; text-align: right;
+    position: fixed; top: 34px; right: 34px;
+    display: flex; gap: 18px;
     font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px;
     user-select: none;
   }
-  .sprung a { color: #a89f93; text-decoration: none; display: block; }
+  .sprung a { color: #a89f93; text-decoration: none; }
   .sprung a:hover { color: #2b2320; }
   #schieber {
     position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%);
@@ -52,10 +53,12 @@
     body { overscroll-behavior: none; }
     button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     #titel { font-size: 13px; line-height: 1.7; top: 16px; left: 16px; max-width: 54vw; white-space: normal; }
-    #zaehler { top: 92px; left: 16px; }
-    .sprung { top: 16px; right: 16px; font-size: 11px; letter-spacing: 1px; }
-    .sprung a { padding: 3px 0; }
+    #zaehler { top: 96px; left: 16px; }
+    .sprung { top: 66px; left: 16px; right: auto; flex-wrap: wrap; gap: 4px 14px; font-size: 10px; letter-spacing: 1px; }
+    .sprung a { padding: 2px 0; }
   }
+  /* 窄桌面窗口（720~759）：导航收紧间距，别咬到不换行标题的尾巴 */
+  @media (min-width: 720px) and (max-width: 759px) { .sprung { gap: 10px; } }
 </style>
 </head>
 <body data-modus="crowd">
@@ -63,11 +66,11 @@
 <div id="titel">我的 <mark id="zahl">1</mark> 个 <mark>朋友</mark> 都是 <mark>javascript</mark> 画的</div>
 <div id="zaehler">1 / 500</div>
 <div class="sprung">
-  <a href="index.html">看看一个人 →</a>
-  <a href="heads.html">看看一墙脸 →</a>
-  <a href="photo.html">拍合影 →</a>
-  <a href="clip.html">剪报一张 →</a>
-  <a href="avatar.html">做个头像 →</a>
+  <a href="index.html">一个人</a>
+  <a href="heads.html">一墙脸</a>
+  <a href="photo.html">拍合影</a>
+  <a href="clip.html">剪报</a>
+  <a href="avatar.html">头像</a>
 </div>
 <div id="schieber" role="slider" tabindex="0" aria-label="朋友人数"
      aria-valuemin="1" aria-valuemax="500" aria-valuenow="1" aria-valuetext="1 个朋友"></div>

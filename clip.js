@@ -65,7 +65,10 @@ function blattGeometrie() {
   const rand = 26;
   const w = Math.min(innerWidth - rand * 2, (innerHeight - rand * 2 - 40) * .74, 600);
   const h = w / .74;
-  return { x: (innerWidth - w) / 2, y: Math.max(rand, (innerHeight - 40 - h) / 2), w, h };
+  // 手机端纸面顶端让开标题下的导航行（底部 89）；
+  // 桌面窄窗时右上导航只会压到纸角的撕边空白，可读内容从报头起，不算叠
+  const oben = innerWidth < 720 ? 100 : rand;
+  return { x: (innerWidth - w) / 2, y: Math.max(oben, (innerHeight - 40 - h) / 2), w, h };
 }
 
 let uiStift = null, uiTick = -1;

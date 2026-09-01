@@ -2965,7 +2965,8 @@ function layout() {
       const bedarf = raumBedarf(head);
       head.mass = Math.min(innerWidth / (2 * bedarf.seite * 1.2), innerHeight / (bedarf.oben + 2.4));
       head.cx = innerWidth / 2;
-      head.cy = innerHeight * .1 + bedarf.oben * head.mass;
+      // 手机端导航是标题下的一整行横排：放大头的头顶至少要压过它
+      head.cy = Math.max(innerHeight * .1, innerWidth < 720 ? 104 : 80) + bedarf.oben * head.mass;
       head.nameY = head.cy + head.mass * 1.62;
       return;
     }
@@ -2983,7 +2984,9 @@ function layout() {
       const bedarf = raumBedarf(head);
       head.mass = Math.min(gw / (2 * bedarf.seite * 1.06), gh / (bedarf.oben + 2.1));
       head.cx = gw * (c + .5);
-      head.cy = gh * r + head.mass * bedarf.oben + gh * .08;
+      // 首行头顶让开标题/导航带（桌面：标题底 66；手机：导航行底约 89）
+      const himmel = r === 0 ? (innerWidth < 720 ? 104 : 88) : gh * .08;
+      head.cy = gh * r + head.mass * bedarf.oben + himmel;
       head.nameY = head.cy + head.mass * 1.62;
     }
     return;
@@ -3001,7 +3004,8 @@ function layout() {
   const span = bedarf.oben + fussW + .55;             // 头顶留边 + 全身 + 名字
   head.mass = Math.min(innerHeight * .8 / span, innerWidth * .45 / (2 * bedarf.seite));
   head.cx = innerWidth / 2;
-  head.cy = innerHeight * .07 + bedarf.oben * head.mass;
+  // 手机端导航行横贯头顶（桌面只需让开标题带，矮窗口也有兜底）
+  head.cy = Math.max(innerHeight * .07, innerWidth < 720 ? 104 : 70) + bedarf.oben * head.mass;
   head.nameY = head.cy + (fussW + .45) * head.mass;
 }
 

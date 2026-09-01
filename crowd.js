@@ -8,7 +8,7 @@
 
 /* ================= 站位与人群 ================= */
 
-// 六排人，后→前：越靠前个头越大、人数越少
+// 六档深度，后→前：越靠前个头越大、人数越少（站位本身按 name-me 式散点，见 platzeLegen）
 const REIHEN_FAKTOR = [.6, .7, .82, .95, 1.1, 1.28];
 const REIHEN_ZAHL = {
   breit: [10, 10, 9, 8, 6, 5],    // ≥1100px：48 人
@@ -16,7 +16,7 @@ const REIHEN_ZAHL = {
   schmal: [7, 7, 6, 6, 4, 4],     // 窄屏：34 人
 };
 const BODEN_RAUM = 158;    // 底部给滑块留的地
-const TITEL_RAUM = 100;    // 顶部给标题留的天
+const TITEL_RAUM = 140;    // 顶部给标题+导航行留的天
 
 let saat = 91;             // 人群种子（换一群时重掷）
 let leute = [];            // Head 实例，下标 = 站位（绘制顺序：后→前）
@@ -34,51 +34,69 @@ function platzeLegen() {
   const R = plan.length;
   const anzahl = plan.reduce((a, b) => a + b, 0);
   // 窗口变宽只会在边上长出新面孔；变窄则从队尾收回
+  // （跨过 720/1100 宽度档时人数变了，站位会整体重排；同档内 resize 稳定）
   while (leute.length < anzahl) leute.push(new Head(saat + leute.length * 7));
   leute.length = anzahl;
   for (const h of leute) headCache(h);
 
   const rand = innerWidth * .04 + 14;
+  const spanX = innerWidth - rand * 2;
   const bodenVorn = innerHeight - BODEN_RAUM;
-  // 个头基准：最挤的一行也要塞得下（2.9 ≈ 平均肩宽 × 安全边）
+  // 个头基准：最挤的一档也要塞得下（2.9 ≈ 平均肩宽 × 安全边）；散点比整行多浪费一成宽度
   let mass0 = Infinity;
   for (let r = 0; r < R; r++) {
-    mass0 = Math.min(mass0, (innerWidth - rand * 2) / (plan[r] * REIHEN_FAKTOR[r] * 2.9));
+    mass0 = Math.min(mass0, spanX / (plan[r] * REIHEN_FAKTOR[r] * 2.9 * 1.1));
   }
-  // 天花板：最高那排（连帽子带名字）不许钻进标题区；超矮窗口（内嵌 iframe 等）兜底为正值，免得负缩放把人倒画
+  // 天花板：最高的人（连帽子带名字）不许钻进标题区；超矮窗口（内嵌 iframe 等）兜底为正值，免得负缩放把人倒画
   let spanntMax = 0;
   for (const h of leute) spanntMax = Math.max(spanntMax, raumBedarf(h).oben + fussWelt(h) + .4);
   const sumF = REIHEN_FAKTOR.slice(1).reduce((a, b) => a + b, 0);
   mass0 = Math.max(3, Math.min(mass0, (bodenVorn - TITEL_RAUM) / (.48 * sumF + spanntMax * REIHEN_FAKTOR[0])));
-  const mass = REIHEN_FAKTOR.map((f) => f * mass0);
-  // 地面线：前排最低，往后每行抬高约半个人
-  const boden = new Array(R);
-  boden[R - 1] = bodenVorn;
-  for (let r = R - 2; r >= 0; r--) boden[r] = boden[r + 1] - .48 * mass[r + 1];
 
-  // 站位：行内均分 + 种子抖动，构图每次 resize 都稳定
-  const quer = strom(20260826, 'plaetze');
-  plaetze = [];
+  /* name-me 式自由站位：深度仍按六档出发（各档人数/个头比例照旧），但位置
+   * 由"中心偏置 + 碰撞拒绝"采样散开——远看是一群人围着，不再是整齐的六排。
+   * 布局只取决于（种子、人数），resize 时同一张脸仍站在同一个相对位置。 */
+  const quer = strom(saat + anzahl * 97, 'haufen');
+  const bodenHinten = bodenVorn - .48 * sumF * mass0;
+  const spanBoden = bodenVorn - bodenHinten;
+  const massVon = (v) => mass0 * (REIHEN_FAKTOR[0] + (REIHEN_FAKTOR[R - 1] - REIHEN_FAKTOR[0]) * v);
+
+  const roh = [];
   for (let r = 0; r < R; r++) {
-    const n = plan[r], m = mass[r];
-    const step = (innerWidth - rand * 2) / n;
-    for (let i = 0; i < n; i++) {
-      plaetze.push({
-        x: rand + step * (i + .5) + quer.range(-1, 1) * step * .14,
-        bodenY: boden[r] + quer.range(-1, 1) * m * .09,
-        mass: m, reihe: r,
-      });
+    const vb = r / (R - 1);
+    for (let k = 0; k < plan[r]; k++) {
+      let wahl = null;
+      for (let versuch = 0; versuch < 36; versuch++) {
+        // 横向往中间聚（边上来得稀）：先均匀散开，再按第二个随机把幅度往中间收
+        const u = .5 + quer.range(-1, 1) * .5 * (1 - .34 * Math.abs(quer.range(-1, 1)));
+        // 深度从本档基准出发抖动 ±0.78 档，前后排的边界糊掉
+        const v = clamp(vb + quer.range(-1, 1) * .78 / (R - 1), 0, 1);
+        const m = massVon(v);
+        const x = rand + u * spanX;
+        const bodenY = bodenHinten + v * spanBoden;
+        const kand = { x, bodenY, mass: m, v };
+        // 肩距不足或前后正遮挡就重掷（遮挡按两人个头的和算半宽）
+        const frei = roh.every((s) =>
+          Math.abs(x - s.x) >= (m + s.mass) * 1.5 || Math.abs(bodenY - s.bodenY) >= (m + s.mass) * 1.05);
+        if (frei) { wahl = kand; break; }
+        if (!wahl) wahl = kand;   // 36 次都撞就认命：轻微遮挡反而像真人群
+      }
+      roh.push(wahl);
     }
   }
-  // 出场序：第一个是前排正中（头一个朋友最醒目），其余从后排到前排、由中间向两边
+
+  // 按地面深度排序：数组序 = 绘制序（后→前），leute 里的脸按这个序认领站位
+  roh.sort((a, b) => a.bodenY - b.bodenY);
+  plaetze = roh.map((p) => ({ ...p, rang: 0, reihe: Math.min(R - 1, Math.round(p.v * (R - 1))) }));
+  // 出场序：第一个是前排正中（头一个朋友最醒目），其余从后到前、由中间向两边
   const mitte = innerWidth / 2;
   let vorn = 0, bestD = 1e9;
   plaetze.forEach((p, i) => {
-    if (p.reihe !== R - 1) return;
+    if (p.v < .82) return;
     const d = Math.abs(p.x - mitte);
     if (d < bestD) { bestD = d; vorn = i; }
   });
-  plaetze.map((p, i) => ({ i, key: i === vorn ? -1 : p.reihe * 1e4 + Math.abs(p.x - mitte) }))
+  plaetze.map((p, i) => ({ i, key: i === vorn ? -1 : p.v * 1e4 + Math.abs(p.x - mitte) }))
     .sort((a, b) => a.key - b.key)
     .forEach((e, rang) => { plaetze[e.i].rang = rang; });
 
@@ -232,6 +250,8 @@ let sprungBei = 0, raketenBei = 0;
 const raketen = [];
 let raketeSaat = 0;
 const SPRUNG_PERIODE = 1.7;   // 起跳动作整周期（含落地回弹），重启要等它走完
+// 庆祝重启节拍：等最慢的动作（挥手）跑完一个自然周期再全员重来，免得掐在半空
+const FEIER_TAKT = Math.max(SPRUNG_PERIODE, AKTIONEN.wave.periode, AKTIONEN.dance.periode);
 
 // 低饱和的墨水烟花：暖红、赭金、苔绿、灰紫
 const KNALL = [oklch(.68, .17, 28), oklch(.74, .15, 85), oklch(.66, .13, 152), oklch(.64, .15, 300)];
@@ -263,10 +283,13 @@ function feierTick(t) {
     feier = false;
     return;
   }
-  // 全员同步起跳，落完整个周期（含回弹）再跳，不打断半空姿态
+  // 全员周期性庆祝：多数人起跳，散着几个挥手/跳舞的，像真的在欢呼（name-me 式）
   if (t >= sprungBei) {
-    for (const h of leute) h.setAktion('jump', t, SPRUNG_PERIODE);
-    sprungBei = t + SPRUNG_PERIODE;
+    leute.forEach((h, i) => {
+      const art = i % 6;
+      h.setAktion(art === 1 ? 'wave' : art === 4 ? 'dance' : 'jump', t, FEIER_TAKT);
+    });
+    sprungBei = t + FEIER_TAKT;
   }
   // 每零点几秒补一批烟花
   if (t >= raketenBei) {

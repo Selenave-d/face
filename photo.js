@@ -482,8 +482,8 @@ function zeichneBanner(t) {
   const dimName = { art: '物种', kopf: '头顶', brille: '眼镜', frisur: '发型' }[ergebnis.dim];
   const detail = ergebnis.info ? `${dimName}·${ergebnis.info}` : dimName;
   const requis = ergebnis.notes?.length ? `　${ergebnis.notes.join(' ')}` : '';
-  // 手机端横幅下移，避开右上角的过滤器两行
-  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, innerWidth < 720 ? 148 : 92);
+  // 手机端横幅下移，避开右上角的过滤器两行（其下沿约 145）
+  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, innerWidth < 720 ? 164 : 92);
   ctx.restore();
 }
 
@@ -493,8 +493,9 @@ function zeichneGesamt() {
   try { ctx.letterSpacing = '2px'; } catch (e) { /*  ignore */ }
   ctx.textAlign = 'center';
   ctx.fillStyle = '#7a7268';
-  // 手机端总分上移一点，避开换行后的标题
-  ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, innerWidth < 720 ? 74 : 64);
+  // 手机端总分靠左，与右侧物种过滤器同一行；桌面居中在标题下
+  if (innerWidth < 720) { ctx.textAlign = 'left'; ctx.fillText(`总分 ${gesamt}`, 16, 104); }
+  else ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, 64);
   // 长按逗表情的小提示（只在待机时显示，放在孩子头顶上方的空白带）
   if (phase === 'idle') {
     ctx.fillStyle = '#a89f93';
@@ -691,9 +692,9 @@ function zeichneBesitz(t) {
   if (!besitz.length) return;
   const st = requisitStift(t);
   const mob = innerWidth < 720;
-  const cw = mob ? 40 : 48, ch = mob ? 46 : 56;
+  const cw = mob ? 40 : 48, ch = mob ? 40 : 56;
   besitz.forEach((item, i) => {
-    const x = 26 + i * (cw + 10), y = innerHeight - (mob ? 128 : 76);
+    const x = 26 + i * (cw + 10), y = innerHeight - (mob ? 90 : 76);
     ctx.save();
     kartonRect(x, y, cw, ch, 6);
     ctx.fillStyle = 'rgba(246,243,237,.8)';
