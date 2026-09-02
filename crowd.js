@@ -62,24 +62,31 @@ function platzeLegen() {
   const massVon = (v) => mass0 * (REIHEN_FAKTOR[0] + (REIHEN_FAKTOR[R - 1] - REIHEN_FAKTOR[0]) * v);
 
   const roh = [];
-  for (let r = 0; r < R; r++) {
+  // 前排先落位（第一个朋友站前排正中），再往后排撒——中心先被占住，聚堆感更强
+  for (let r = R - 1; r >= 0; r--) {
     const vb = r / (R - 1);
     for (let k = 0; k < plan[r]; k++) {
-      let wahl = null;
+      let wahl = null, wahlStand = -1;
       for (let versuch = 0; versuch < 36; versuch++) {
-        // 横向往中间聚（边上来得稀）：先均匀散开，再按第二个随机把幅度往中间收
-        const u = .5 + quer.range(-1, 1) * .5 * (1 - .34 * Math.abs(quer.range(-1, 1)));
+        // 前排头一个：先在正中 ±6% 挑位置，领衔的朋友一定站 C 位；
+        // 其余人均匀散开、再按第二个随机把幅度往中间收（边上来得稀）
+        const u = (r === R - 1 && k === 0 && versuch < 12)
+          ? .5 + quer.range(-1, 1) * .06
+          : .5 + quer.range(-1, 1) * .5 * (1 - .34 * Math.abs(quer.range(-1, 1)));
         // 深度从本档基准出发抖动 ±0.78 档，前后排的边界糊掉
         const v = clamp(vb + quer.range(-1, 1) * .78 / (R - 1), 0, 1);
         const m = massVon(v);
         const x = rand + u * spanX;
         const bodenY = bodenHinten + v * spanBoden;
-        const kand = { x, bodenY, mass: m, v };
-        // 肩距不足或前后正遮挡就重掷（遮挡按两人个头的和算半宽）
-        const frei = roh.every((s) =>
-          Math.abs(x - s.x) >= (m + s.mass) * 1.5 || Math.abs(bodenY - s.bodenY) >= (m + s.mass) * 1.05);
-        if (frei) { wahl = kand; break; }
-        if (!wahl) wahl = kand;   // 36 次都撞就认命：轻微遮挡反而像真人群
+        // 分离度 = 与已落位者两轴约束里最差的一个（≥1 即肩距与遮挡双达标）
+        let stand = Infinity;
+        for (const s of roh) {
+          const dx = Math.abs(x - s.x), dy = Math.abs(bodenY - s.bodenY);
+          stand = Math.min(stand, Math.max(dx / ((m + s.mass) * 1.5), dy / ((m + s.mass) * 1.05)));
+        }
+        if (stand >= 1) { wahl = { x, bodenY, mass: m, v }; break; }
+        // 深度跨度小于遮挡半径，多数候选注定撞车：留分离度最高的那个，叠得最轻
+        if (stand > wahlStand) { wahlStand = stand; wahl = { x, bodenY, mass: m, v }; }
       }
       roh.push(wahl);
     }
@@ -286,8 +293,10 @@ function feierTick(t) {
   // 全员周期性庆祝：多数人起跳，散着几个挥手/跳舞的，像真的在欢呼（name-me 式）
   if (t >= sprungBei) {
     leute.forEach((h, i) => {
+      if (h.akBis > t + .05) return;   // 上一拍的动作还没演完：让它演完，下一拍归队
       const art = i % 6;
-      h.setAktion(art === 1 ? 'wave' : art === 4 ? 'dance' : 'jump', t, FEIER_TAKT);
+      const name = art === 1 ? 'wave' : art === 4 ? 'dance' : 'jump';
+      h.setAktion(name, t, AKTIONEN[name].periode);   // 各按自然周期收尾，重开时不从半空拽回
     });
     sprungBei = t + FEIER_TAKT;
   }
@@ -444,7 +453,7 @@ window.__menge = {
   wert: () => wert,
   sichtbar: () => sichtbarAus(wert),
   leute: () => leute.length,
-  plaetze: () => plaetze.map((p) => ({ rang: p.rang, x: Math.round(p.x), mass: Math.round(p.mass) })),
+  plaetze: () => plaetze.map((p) => ({ rang: p.rang, x: Math.round(p.x), bodenY: Math.round(p.bodenY), v: +p.v.toFixed(2), mass: Math.round(p.mass) })),
   feier: () => feier,
   raketen: () => raketen.length,
 };

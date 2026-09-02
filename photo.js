@@ -435,13 +435,19 @@ for (const [gruppe, key] of [['filterArt', 'art'], ['filterMedia', 'media']]) {
 /* ================= 绘制 ================= */
 
 const TINTE = makePalette({ hautT: .5, haarT: .1, akzentT: .5, tinteT: .5 }).tinte;
-const wandStift = makeStift(ctx, 42, TINTE, 1, 0);
+let wandStift = makeStift(ctx, 42, TINTE, 1, 0), wandTick = 0;
+// 架子线/选中圈按 8fps 换笔沸腾，与全站笔触节奏一致（笔的噪声按 tick 量化）
+function wandPenne(t) {
+  const tick = Math.floor(t * 8);
+  if (wandTick !== tick) { wandStift = makeStift(ctx, 42, TINTE, 1, tick); wandTick = tick; }
+  return wandStift;
+}
 
 function regale(t) {
   // 两条架子线：手绘横线，脚下三尺
   for (const reihe of [0, 1]) {
     const g = platzGeometrie(reihe * KINDER_PRO_REIHE);
-    wandStift.zug(
+    wandPenne(t).zug(
       [{ x: innerWidth * .06, y: g.fussY + 4 }, { x: innerWidth * .5, y: g.fussY + 6 }, { x: innerWidth * .94, y: g.fussY + 4 }],
       { spur: `regal${reihe}`, w: 1.4, wackel: .5, farbe: TINTE, deckung: .75 });
   }
@@ -455,7 +461,7 @@ function zeichneWahl(kind, t) {
     const a = i / 18 * Math.PI * 2;
     pts.push({ x: kind.x + Math.cos(a) * r, y: kind.footY + kind.k * .02 + Math.sin(a) * r * .22 });
   }
-  wandStift.zug(pts, { spur: 'wahl', geschlossen: true, w: 1.6, wackel: 1, deckung: .85, farbe: '#b0654a' });
+  wandPenne(t).zug(pts, { spur: 'wahl', geschlossen: true, w: 1.6, wackel: 1, deckung: .85, farbe: '#b0654a' });
 }
 
 function zeichneName(kind) {

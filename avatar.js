@@ -34,9 +34,10 @@ function zeichneBuehne(t) {
   const tick = Math.floor(t * 8);
   if (uiTick !== tick) { uiStift = makeStift(ctx, saat * 7 + 3, TINTE, 1, tick); uiTick = tick; }
   const b = buehne();
-  // 一张略亮的纸片 + 手绘方框
+  // 一张略亮的纸片 + 手绘方框（不透明纸色会盖掉整页 grain，补一层纸纹）
   ctx.fillStyle = '#fbf8f1';
   ctx.fillRect(b.x, b.y, b.s, b.s);
+  if (grainPattern) { ctx.fillStyle = grainPattern; ctx.fillRect(b.x, b.y, b.s, b.s); }
   uiStift.zug([
     { x: b.x, y: b.y }, { x: b.x + b.s, y: b.y },
     { x: b.x + b.s, y: b.y + b.s }, { x: b.x, y: b.y + b.s },
@@ -59,6 +60,8 @@ function avatarPNG() {
   const oc = out.getContext('2d');
   oc.fillStyle = '#fbf8f1';
   oc.fillRect(0, 0, PX, PX);
+  // 导出也带纸纹；个别环境不允许跨画布用 pattern 时保持纯色
+  try { if (grainPattern) { oc.fillStyle = grainPattern; oc.fillRect(0, 0, PX, PX); } } catch (e) { /* 纯色即可 */ }
   const bedarf = raumBedarf(kopf);
   // 笔闭包绑 ctx：离屏渲染前作废旧笔；渲染后同样作废，主画布下一帧重绑
   kopf.cache.stift = null; kopf.cache.stiftTick = -1; kopf.cache.stiftMass = -1;

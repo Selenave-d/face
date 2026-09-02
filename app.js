@@ -2753,8 +2753,9 @@ function drawHead(ctx, head, t) {
   if (umriss.length < 8) return;
   const tick = Math.floor(z.zeit * 8 + dna.taktVersatz);
   // 笔按 tick 复用：同一 tick 内（60 帧里的 7 帧）不重建噪声表
-  if (cache.stiftTick !== tick || cache.stiftMass !== mass) {
+  if (cache.stiftCtx !== ctx || cache.stiftTick !== tick || cache.stiftMass !== mass) {
     cache.stift = makeStift(ctx, dna.seed, pal.tinte, stiftSkala(mass), tick);
+    cache.stiftCtx = ctx;
     cache.stiftTick = tick;
     cache.stiftMass = mass;
   }
@@ -3084,14 +3085,43 @@ if (FOTO || CROWD || CLIP || AVATAR) {
   layout();
 }
 
+// 单人页的地面线与脚下影子：与「一群朋友」页同款手法，人不再浮在纸上
+// （顶层名带 einz 后缀：crowd.js 也有一对 bodenStift/bodenTick，classic script 共享词法域不能重名）
+const BODEN_TINTE = makePalette({ hautT: .5, haarT: .1, akzentT: .5, tinteT: .5 }).tinte;
+let bodenStiftEinz = null, bodenTickEinz = -1;
+
+function bodenZeichnen(t, head) {
+  if (!head) return;
+  const bt = Math.floor(t * 8);
+  if (bodenTickEinz !== bt) { bodenStiftEinz = makeStift(ctx, 556, BODEN_TINTE, 1, bt); bodenTickEinz = bt; }
+  const pose = head.motionPose(t);
+  const schrumpf = 1 - Math.min(.8, Math.max(0, -pose.dy)) * .7;   // 跳起时影子收窄变淡
+  const fx = head.cx + pose.dx * head.mass;                        // 影子跟脚走
+  const bodenY = head.nameY - head.mass * .45 + head.mass * .08;
+  // 地面线：脚下一短横（地面不随跳跃移动）
+  bodenStiftEinz.zug([
+    { x: fx - 1.15 * head.mass, y: bodenY },
+    { x: fx, y: bodenY + .02 * head.mass },
+    { x: fx + 1.15 * head.mass, y: bodenY },
+  ], { spur: 'bodenlinie', w: 1.4, deckung: .45, eckig: true });
+  for (let f = 0; f < 3; f++) {
+    const fo = (f - 1) * .12;
+    bodenStiftEinz.zug([
+      { x: fx + (fo - .1) * head.mass * schrumpf, y: bodenY + 2 + f },
+      { x: fx + (fo + .1) * head.mass * schrumpf, y: bodenY + 3 + f },
+    ], { spur: `schatten${f}`, w: 1, deckung: .22 * schrumpf, eckig: true });
+  }
+}
+
 let prev = performance.now();
 function frame(now) {
-  const dt = Math.min((now - prev) / 1000, 0.05);
+  const dt = Math.min((now - prev) / 1000, .05);
   prev = now;
   // __freezeT 是调试钩子：固定时间戳用来截指定相位
   const t = (typeof window !== 'undefined' && window.__freezeT != null) ? window.__freezeT : now / 1000;
 
   papier();
+  if (!WAND) bodenZeichnen(t, heads[0]);
   const zuZeichnen = (WAND && vergroessert >= 0) ? [heads[vergroessert]] : heads;
   for (const head of zuZeichnen) {
     head.update(dt, t, pointer);

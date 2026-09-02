@@ -102,6 +102,9 @@ function zeichneBlatt(t) {
   ctx.closePath();
   ctx.fillStyle = '#fbf8f1';
   ctx.fill();
+  // 纸纹回到纸片上：不透明纸色会把整页 grain 盖掉，趁路径还在补一层
+  ctx.fillStyle = grainPattern;
+  ctx.fill();
   // 右下一点点投影线，纸片浮在桌面的暗示
   s.zug([
     { x: P + W + 3, y: Q + 6 }, { x: P + W + 3, y: Q + H + 3 }, { x: P + 6, y: Q + H + 3 },
@@ -182,6 +185,13 @@ function zeichneBlatt(t) {
   s.zug([
     { x: P + W / 2, y: spaltenY - zeilenH * .35 }, { x: P + W / 2, y: spaltenY + Math.ceil(passt / 2) * zeilenH - zeilenH * .2 },
   ], { spur: 'spalte', w: .8, deckung: .45, eckig: true });
+
+  // 一道折痕：横贯纸面的压痕与错位高光，纸片被折过又摊平（正好压过肖像）
+  const fy = Q + H * .58;
+  s.zug([{ x: P + 4, y: fy }, { x: P + W * .5, y: fy + 4 }, { x: P + W - 4, y: fy + 1 }],
+    { spur: 'falte', w: 1.1, deckung: .14, eckig: true });
+  s.zug([{ x: P + 4, y: fy + 2.5 }, { x: P + W - 4, y: fy + 3.5 }],
+    { spur: 'falteLicht', w: .8, deckung: .09, eckig: true, farbe: '#fffdf6' });
 
   // 朱红印章：压在标题右端，双框 + 楷体，微微歪
   ctx.save();
