@@ -366,13 +366,14 @@ function knips(t) {
 }
 knipsBtn.addEventListener('click', () => knips(performance.now() / 1000));
 
-// 换一班：全新十个孩子，总分与道具保留，状态机回 idle
+// 换一班：全新十个孩子，总分与道具保留，状态机回 idle，架上陈设跟着换
 function neueKlasse() {
   gewaehlt.clear();
   knipsBtn.disabled = true;
   phase = 'idle';
   ergebnis = null;
   draft = null;
+  dekoSaat = Math.floor(Math.random() * 1e9);
   kinder.length = 0;
   for (let p = 0; p < KINDER_PRO_REIHE * 2; p++) kinder.push(neuesKind(p));
 }
@@ -450,6 +451,89 @@ function regale(t) {
     wandPenne(t).zug(
       [{ x: innerWidth * .06, y: g.fussY + 4 }, { x: innerWidth * .5, y: g.fussY + 6 }, { x: innerWidth * .94, y: g.fussY + 4 }],
       { spur: `regal${reihe}`, w: 1.4, wackel: .5, farbe: TINTE, deckung: .75 });
+  }
+}
+
+/* ================= 架上陈设：纯装饰小物 =================
+ * 与计分道具（REQUISITEN）无关：书摞/盆栽/笔筒只站在架子的空档里当布景。
+ * 布局由 dekoSaat 记忆（换一班换陈设），label 用 400+ 段，不与道具/卡片冲突。 */
+
+const REGAL_DEKO = {
+  // 一摞书：2~4 本微错位的圆角方块摞起来，书脊一道刻线
+  buecher: {
+    draw(st, x, y, s, r, lb) {
+      const n = 2 + Math.floor(r.n() * 2.99);
+      let yy = y;
+      for (let i = 0; i < n; i++) {
+        const bw = s * (.5 + r.n() * .2), bh = s * (.16 + r.n() * .06);
+        const x0 = x - bw / 2 + r.range(-1, 1) * s * .04;
+        const kip = r.range(-1, 1) * s * .045;
+        st.line([[x0, yy], [x0 + bw, yy], [x0 + bw + kip, yy - bh], [x0 + kip, yy - bh]], 1.1, { label: lb + i, closed: true, alpha: .82 });
+        st.line([[x0 + bw * .52, yy], [x0 + bw * .52 + kip, yy - bh]], .7, { label: lb + 5 + i, alpha: .4 });
+        yy -= bh * .92;
+      }
+    },
+  },
+  // 小盆栽：梯形盆 + 盆沿，3~5 笔从盆口张开的弧形叶
+  topf: {
+    draw(st, x, y, s, r, lb) {
+      const tw = s * .34;
+      st.line([[x - tw / 2, y - s * .42], [x + tw / 2, y - s * .42], [x + tw * .34, y], [x - tw * .34, y]], 1.1, { label: lb, closed: true, alpha: .85 });
+      st.line([[x - tw * .55, y - s * .46], [x + tw * .55, y - s * .46]], 1, { label: lb + 1, alpha: .7 });
+      const n = 3 + Math.floor(r.n() * 2.6);
+      for (let i = 0; i < n; i++) {
+        const mitte = Math.PI * 1.5 + (i / Math.max(1, n - 1) - .5) * 1.9;
+        st.line(bogenPts(x, y - s * .44, s * .17, s * .33, mitte - .45, mitte + .45, 6), 1.1, { label: lb + 2 + i, alpha: .8 });
+      }
+    },
+  },
+  // 笔筒水杯：两侧竖线 + 杯口半椭圆 + 水面浅弧，斜插一支铅笔
+  becher: {
+    draw(st, x, y, s, r, lb) {
+      const bw = s * .13, bh = s * .42;
+      st.line([[x - bw, y], [x - bw - s * .012, y - bh]], 1.1, { label: lb, alpha: .85 });
+      st.line([[x + bw, y], [x + bw + s * .012, y - bh]], 1.1, { label: lb + 1, alpha: .85 });
+      st.line(bogenPts(x + s * .006, y - bh, bw, s * .035, Math.PI, Math.PI * 2, 7), 1.1, { label: lb + 2, alpha: .85 });
+      st.line(bogenPts(x, y - bh * .55, bw * .94, s * .028, 0, Math.PI, 7), .8, { label: lb + 3, alpha: .5 });
+      st.line([[x - bw * .3, y - bh * .92], [x + bw * .55, y - bh * 1.5]], 1, { label: lb + 4, alpha: .8 });
+      st.line([[x + bw * .46, y - bh * 1.42], [x + bw * .64, y - bh * 1.56]], 1.3, { label: lb + 5, alpha: .8 });
+    },
+  },
+};
+
+let dekoSaat = Math.floor(Math.random() * 1e9);
+let dekoMemo = { saat: -1, slots: null };
+
+function regalDekoSlots() {
+  if (dekoMemo.saat !== dekoSaat) {
+    const r = strom(dekoSaat, 'deko');
+    const lucken = [0, 1, 2, 3];   // 孩子槽位之间的四个空档（宽度的 20/40/60/80%）
+    for (let i = lucken.length - 1; i > 0; i--) {
+      const j = Math.floor(r.n() * (i + 1));
+      [lucken[i], lucken[j]] = [lucken[j], lucken[i]];
+    }
+    dekoMemo = {
+      saat: dekoSaat,
+      slots: lucken.slice(0, 2 + Math.floor(r.n() * 1.9)).map((luck, i) => ({
+        luck,
+        reihe: r.n() < .55 ? 0 : 1,
+        typ: ['buecher', 'topf', 'becher'][Math.floor(r.n() * 3)],
+        lb: 400 + i * 8,
+      })),
+    };
+  }
+  return dekoMemo.slots;
+}
+
+function zeichneRegalDeko(t) {
+  if (innerWidth < 640) return;   // 窄屏孩子已彼此相叠，空档放不下东西
+  const st = requisitStift(t);
+  for (const s of regalDekoSlots()) {
+    const x = innerWidth * (s.luck + 1) / KINDER_PRO_REIHE;
+    const y = innerHeight * (s.reihe === 0 ? .5 : .8) + 5;   // 底边吻住架子线
+    // 每槽一条独立的参数流：每帧从头重放，物体形状逐帧稳定
+    REGAL_DEKO[s.typ].draw(st, x, y, innerHeight * (s.reihe === 0 ? .055 : .075),
+      strom(dekoSaat + s.luck * 197 + s.reihe * 31, 'deko'), s.lb);
   }
 }
 
@@ -745,6 +829,7 @@ function rahmen(now) {
 
   papier();
   regale(t);
+  zeichneRegalDeko(t);   // 架上陈设：站在空档里当布景，画在孩子之前形成层次
   zeichneMauernFlecken(t);   // 墨渍在墙上：贴纸之前、孩子们最后
   zeichneAbzuege(t);   // 贴纸照片贴在墙上：画在孩子们后面，人挡住贴纸而不是贴纸挡人
 

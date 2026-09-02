@@ -563,13 +563,13 @@ function m0(c) { return c.m; }
 // 杏眼/细眼/豆豆眼居多，大圆眶少见，搞怪眼（x_x、星星、涂鸦）极罕见
 const AUGEN_W = [['punkt', 1.8], ['knopf', 1.8], ['ring', .5], ['mandel', 2.2], ['strich', 1.4], ['zwinker', .3], ['schlaefrig', 1.2], ['weit', .5], ['offen', .9], ['froh', 1], ['kreuz', .03], ['stern', .03], ['kritzel', .06]];
 const NASEN_W = [['haken', 1.4], ['komma', 1.4], ['strich', 1.1], ['welle', .8], ['knopf', 1], ['lang', 1.2], ['punkte', 1]];
-const MUENDER_W = [['strich', 1], ['laecheln', 2], ['klein', 1], ['welle', .8], ['offen', .8], ['lippen', .9], ['grinsen', 1.2], ['zaehne', .8], ['hasenzahn', .7], ['schief', 1], ['zickzack', .6]];
+const MUENDER_W = [['strich', 1], ['laecheln', 2], ['klein', 1], ['welle', .8], ['offen', .8], ['lippen', .9], ['grinsen', 1.2], ['zaehne', .8], ['hasenzahn', .7], ['schief', 1], ['press', .9], ['zickzack', .6]];
 // 常见款为主：侧分/短发/齐刘海/丸子头/辫子；爆炸头与卷发云极罕见
 const HAAR_W = [['keine', .9], ['flaum', 1], ['haube', 1.8], ['pony', 1.8], ['locken', .5], ['stacheln', .9], ['antenne', .15], ['seitenscheitel', 2.2], ['lockenwolke', .05], ['igel', .9], ['zoepfe', 1.1], ['dutt', 1.3], ['afro', .05]];
 // 帽饰整体少见
 const DECKUNG_W = [['keine', 16], ['stirnband', .8], ['kappe', .8], ['hut', .4], ['kopfhoerer', .5]];
 // 眼镜常见
-const BRILLE_W = [['keine', 6], ['rund', 1.5], ['eckig', 1.2]];
+const BRILLE_W = [['keine', 6], ['rund', 1.5], ['eckig', 1.2], ['halbmond', .8]];
 // 胡须稀少
 const BART_W = [['keiner', 30], ['stoppeln', .8], ['schnauz', .4], ['stoppelschnauz', .3]];
 // 雀斑少见，红晕清淡地保留
@@ -583,7 +583,7 @@ const GESICHT_FORMEN = {
   muede: { auge: 'schlaefrig' },
 };
 const GESICHT_FOLGE = ['', 'froh', 'boese', 'traurig', 'muede'];   // 循环顺序：日常→笑→怒→难过→困
-const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2]];
+const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2], ['schal', .7]];
 const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4]];
 const ZIERRAT_W = [['keiner', 7], ['ohrring', 1.2], ['pflaster', .8]];
 // 这些发型会盖住头顶，发带/便帽/耳机就不出现了
@@ -722,6 +722,7 @@ const MUND_BASIS = {
   laecheln: [[-.5, -.26], [0, .44], [.5, -.22]],
   klein: [[-.26, -.1], [0, .22], [.26, -.08]],
   welle: [[-.5, .1], [-.16, -.18], [.16, .2], [.5, -.1]],
+  press: [[-.44, -.1], [0, .12], [.44, -.08]],   // 抿嘴：中间轻轻下压的直线感
 };
 
 /* ================= 神态：每个人的活动状态 =================
@@ -1315,13 +1316,16 @@ function drawGlasses(stift, ctx3d, feldL, feldR, augenMass, kind, pal, kopf, lay
   const r = Math.min(augenMass * 1.45, dist * .86, kopf.rx * .36);
   const glas = (zentrum, idx) => {
     const pts = [];
-    for (let i = 0; i < 24; i++) {
-      const w = i / 24 * 6.2832;
+    const vol = kind !== 'halbmond';   // 半月老花镜只取上半圈，闭合边正好是平底
+    const n = vol ? 24 : 14;
+    for (let i = 0; i < n; i++) {
+      const w = vol ? i / n * 6.2832 : Math.PI + i / (n - 1) * Math.PI;
       let ex = Math.cos(w), ey = Math.sin(w);
       if (kind === 'eckig') {
         ex = Math.sign(ex) * Math.abs(ex) ** .42;
         ey = Math.sign(ey) * Math.abs(ey) ** .42 * .82;
       }
+      if (kind === 'halbmond') ey *= .9;
       pts.push(proj({ x: zentrum.x + ex * r, y: zentrum.y + ey * r, z: zentrum.z }));
     }
     stift.zug(pts, { spur: `glas${idx}`, w: LID_BREITE * .85, wackel: .003, geschlossen: true, farbe: pal.tinte });
@@ -2237,6 +2241,21 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
   } else if (kragen === 'rund') {
     stift.zug([{ x: a.x - .1, y: a.y }, { x: mx, y: untenY + l * .12 }, { x: b.x + .1, y: b.y }],
       { spur: 'kragen', w: .022, wackel: .004, farbe: pal.tinte });
+  } else if (kragen === 'schal') {
+    // 围巾：颈根一道宽绕弧 + 垂在肩前的一小头，尾端三笔流苏
+    stift.zug([{ x: a.x - .1, y: a.y - .03 }, { x: mx, y: untenY + l * .13 }, { x: b.x + .1, y: b.y - .03 }],
+      { spur: 'schal', w: .034, wackel: .004, farbe: pal.tinte });
+    stift.zug([{ x: a.x - .04, y: a.y + .04 }, { x: mx, y: untenY + l * .19 }, { x: b.x + .04, y: b.y + .04 }],
+      { spur: 'schal2', w: .026, wackel: .004, farbe: pal.tinte });
+    const sx = mx + halb * .6;
+    stift.zug([{ x: sx - .045, y: untenY + l * .14 }, { x: sx - .06, y: untenY + l * .3 }, { x: sx - .02, y: untenY + l * .33 }],
+      { spur: 'schal3', w: .026, wackel: .004, farbe: pal.tinte, eckig: true });
+    stift.zug([{ x: sx + .03, y: untenY + l * .14 }, { x: sx + .04, y: untenY + l * .27 }, { x: sx + .075, y: untenY + l * .3 }],
+      { spur: 'schal4', w: .026, wackel: .004, farbe: pal.tinte, eckig: true });
+    for (let i = 0; i < 3; i++) {
+      stift.zug([{ x: sx - .05 + i * .045, y: untenY + l * .32 }, { x: sx - .045 + i * .045, y: untenY + l * .37 }],
+        { spur: `schalfranse${i}`, w: .018, wackel: .003, farbe: pal.tinte, einlagig: true });
+    }
   }
   return { mx, halb, untenY };
 }
