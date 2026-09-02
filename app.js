@@ -1362,7 +1362,9 @@ function drawZierrat(stift, ctx3d, dna, kind, ohrFelder, seite, pal) {
   }
   if (kind === 'pflaster') {
     const layout = dna.layout;
-    const feld = feldAn(seite * Math.min(.88, layout.augeU + .3), layout.augeV * .2 + layout.mundV * .8, ctx3d);
+    // 戴眼镜时贴布往下挪：避开镜圈下缘，不横穿镜框
+    const misch = (dna.merkmale.brille && dna.merkmale.brille !== 'keine') ? [.05, .95] : [.2, .8];
+    const feld = feldAn(seite * Math.min(.88, layout.augeU + .3), layout.augeV * misch[0] + layout.mundV * misch[1], ctx3d);
     if (feld.nz < .15) return;
     const platte = (dreh, idx) => {
       const cos = Math.cos(dreh), sin = Math.sin(dreh);
@@ -2837,8 +2839,9 @@ function drawHead(ctx, head, t) {
   // 13. 头发与前侧覆盖物
   drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
   drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
-  // 14. 小装饰（耳环/创可贴贴在最上层）
-  drawZierrat(stift, ctx3d, dna, kopfh && mk.zierrat === 'ohrring' ? 'keiner' : mk.zierrat, ohren, dna.seite, pal);
+  // 14. 小装饰（耳环/创可贴贴在最上层；帽子或 afro/爆炸卷盖住耳朵时不画耳环，免得浮在发块上）
+  const ohrVerdeckt = kopfh || dna.merkmale.haar === 'afro' || dna.merkmale.haar === 'lockenwolke';
+  drawZierrat(stift, ctx3d, dna, mk.zierrat === 'ohrring' && ohrVerdeckt ? 'keiner' : mk.zierrat, ohren, dna.seite, pal);
 
   ctx.restore();
 

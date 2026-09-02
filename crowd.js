@@ -107,6 +107,19 @@ function platzeLegen() {
     .sort((a, b) => a.key - b.key)
     .forEach((e, rang) => { plaetze[e.i].rang = rang; });
 
+  // 报得上名字的前 12 人：名字带离得太近的往下错一行（名字画在人群之上，见 rahmen）
+  const gesetzt = [];
+  for (const p of plaetze.filter((q) => q.rang < 12).sort((a, b) => a.bodenY - b.bodenY)) {
+    p.nameHub = 0;
+    for (const b of gesetzt) {
+      if (Math.abs(p.x - b.x) < 64 && Math.abs((p.bodenY + p.mass * .3) - (b.bodenY + b.mass * .3 + b.nameHub)) < 17) {
+        p.nameHub = 17;
+        break;
+      }
+    }
+    gesetzt.push(p);
+  }
+
   plaetze.forEach((p, i) => {
     const h = leute[i];
     h.mass = p.mass;
@@ -410,7 +423,7 @@ function rahmen(now) {
     const alpha = clamp(sicht - p.rang, 0, 1);
     if (alpha <= 0) continue;
     h.update(dt, t, pointer);
-    h.zeigeName = namenAn;
+    h.zeigeName = false;   // 名字改在人群之上统一画（循环后），不再被前排身体盖住
     if (alpha < 1) ctx.globalAlpha = alpha;
     // 脚下影子：三根短斜线，跳起时人离地、影子钉在原地并收窄变淡
     const dy = h.akName === 'jump' ? h.motionPose(t).dy : 0;
@@ -426,6 +439,24 @@ function rahmen(now) {
     const sp = kopfSprite(h, p, t, namenAn);
     ctx.drawImage(sp.cv, Math.round(p.x - sp.w / 2), Math.round(sp.topY), sp.w, sp.h);
     ctx.globalAlpha = 1;
+  }
+  // 名字画在人群之上：可见人数少时才报名，淡入与人同步，样式与单人页一致
+  if (namenAn) {
+    ctx.save();
+    ctx.font = `13px "Kaiti", "STKaiti", "楷体", serif`;
+    try { ctx.letterSpacing = '2px'; } catch (e) { /* 旧浏览器忽略 */ }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8b8894';
+    for (let i = 0; i < plaetze.length; i++) {
+      const p = plaetze[i];
+      const alpha = clamp(sicht - p.rang, 0, 1);
+      if (alpha <= 0) continue;
+      if (alpha < 1) ctx.globalAlpha = alpha;
+      ctx.fillText(leute[i].dna.name, p.x, p.bodenY + p.mass * .3 + (p.nameHub || 0));
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
   raketenZeichnen(t);
   schieberZeichnen(t);
