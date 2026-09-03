@@ -1,6 +1,7 @@
-/* 纸上的小人 · 报纸剪报 —— 寻人启事/目击新闻生成器
- * 一张竖版剪报：报头 + 日期栏 + 通栏标题 + 手绘胸像（app.js 引擎，带肩块的胸像裁切）
- * + 双栏铅字假文 + 悬赏行 + 朱红印章 + 撕纸边。
+/* 纸上的小人 · 报纸剪报 —— 寻人启事/头版双肖像生成器
+ * 一张竖版剪报，版式由种子分派：寻人启事（居中一帧胸像）或头版（通栏大标题 + 并排两帧）。
+ * 报头 + 日期栏 + 通栏标题 + 手绘胸像（app.js 引擎，带肩块的胸像裁切）
+ * + 双栏铅字假文 + 悬赏行 + 朱红印章 + 折痕 + 撕纸边。
  * ?seed=N 同种子同剪报；「存图片」导出 PNG（纯 canvas，零依赖）。
  * 角色由 app.js 的 Head/drawHead 提供；纸面/纸纹用 papier()；线条全程 8fps 沸腾。
  */
@@ -14,7 +15,7 @@ let saat = (() => {
   return Number.isFinite(s) && s > 0 ? s : (Math.random() * 1e9) | 0;
 })();
 
-let kopf = null;
+let kopf = null, kopf2 = null;
 function neuesKopf(seed) {
   saat = seed;
   const h = new Head(seed);
@@ -22,7 +23,16 @@ function neuesKopf(seed) {
   h.zeigeName = false;   // 名字写进标题与图注，不在脚下重复
   return h;
 }
+// 第二张脸（头版双肖像用）：neuesKopf 会顺手改全局种子，这里必须是纯函数
+const TOTER_ZEIGER = { x: 0, y: 0, active: false };   // 头版第二人不追鼠标，安静待着
+function zweitKopf(seed) {
+  const h = new Head(seed);
+  headCache(h);
+  h.zeigeName = false;
+  return h;
+}
 kopf = neuesKopf(saat);
+kopf2 = zweitKopf(saat + 1013);
 
 /* ================= 文案池（一个 seed 一套说辞） ================= */
 
@@ -41,10 +51,30 @@ const SATZ_MITTE = [
 const SATZ_ENDE = ['，引发围观。', '，场面一度十分可爱。', '，本报将持续关注。', '，目前纸面平静。'];
 const LOHN = ['悬赏：水果糖叁颗', '悬赏：橡皮半块', '悬赏：贴纸两张', '酬谢：瓜子一把'];
 const STEMPEL = ['已核实', '独家', '寻人', '加急'];
+// 头版（双肖像）专用文案
+const DUO_TITEL_FORM = [
+  (a, b) => `${a}与${b}同时现身`,
+  (a, b) => `喜讯：${a}找到了${b}`,
+  (a, b) => `${a}和${b}，谁先笑了？`,
+  (a, b) => `本报确认：${a}认识${b}`,
+  (a, b) => `${a}为${b}画了顶帽子`,
+  (a, b) => `${a}与${b}平分一块橡皮`,
+  (a, b) => `${a}${b}街头二重奏`,
+  (a, b) => `${a}牵手${b} 全城祝福`,
+];
+const DUO_NOTIZ = [
+  '编者按：确为朋友', '本版编辑仍在找笔', '据称二人从不吵架', '消息来源请求匿名',
+  '下期预告：仍是朋友', '校对：另一位朋友', '印刷厂表示满意', '读者来电：很像',
+  '中缝启事：勿投喂', '转载请注明出处',
+];
+const DUO_LOHN = ['悬赏：水果糖陆颗', '悬赏：橡皮一整块', '酬谢：贴纸肆张', '悬赏：瓜子两把'];
+const DUO_STEMPEL = ['已核实', '独家', '号外', '首发'];
 
 function texte(seed) {
   const r = strom(seed, 'text');
   const name = chinesischerName(strom(seed, 'name'));
+  // 头版字段全部走独立 label 流且追加在末尾：不动上面 'text' 流的消费顺序，同种子寻人版文案一字不变
+  const name2 = chinesischerName(strom(seed, 'name2'));
   return {
     blatt: r.pick(BLATT_NAME),
     datum: `19${40 + Math.floor(r.n() * 59)} 年 ${1 + Math.floor(r.n() * 12)} 月 ${1 + Math.floor(r.n() * 28)} 日`,
@@ -55,6 +85,11 @@ function texte(seed) {
     lohn: r.pick(LOHN),
     stempel: r.pick(STEMPEL),
     name,
+    name2,
+    duoTitel: strom(seed, 'duoTitel').pick(DUO_TITEL_FORM)(name, name2),
+    duoNote: strom(seed, 'duoNote').pick(DUO_NOTIZ),
+    duoLohn: strom(seed, 'duoLohn').pick(DUO_LOHN),
+    duoStempel: strom(seed, 'duoStempel').pick(DUO_STEMPEL),
   };
 }
 
@@ -127,6 +162,65 @@ function zeichneBlatt(t) {
   s.zug([{ x: P + p, y: Q + p + W * .14 }, { x: P + W - p, y: Q + p + W * .14 }], { spur: 'linie-a', w: 1.3, deckung: .8, eckig: true });
   s.zug([{ x: P + p, y: Q + p + W * .155 }, { x: P + W - p, y: Q + p + W * .155 }], { spur: 'linie-b', w: .8, deckung: .5, eckig: true });
 
+  // 版式由种子分派：寻人启事（单肖像）或头版（双肖像），同种子永远是同一版
+  if (strom(saat, 'layout').n() < .5) zeichneFront(t, s, tx, P, Q, W, H, p);
+  else zeichneSucht(t, s, tx, P, Q, W, H, p);
+}
+
+/* —— 两种版式共用的三件套：双栏铅字 / 折痕 / 印章，只是落点不同 —— */
+
+function spalten(s, tx, P, Q, W, H, p, spaltenY) {
+  // 双栏铅字：栏间一道细线，行距松，铅灰色
+  const spaltenH = Q + H - p * 1.2 - spaltenY;
+  const gut = W * .05;
+  const spW = (W - p * 2 - gut) / 2;
+  const zeilenH = W * .05;
+  const passt = Math.max(2, Math.floor(spaltenH / zeilenH));
+  ctx.save();
+  ctx.font = `${Math.round(W * .024)}px "Courier New", monospace`;
+  ctx.fillStyle = '#6f6a63';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i < passt; i++) {
+    const spalte = i % 2, zeile = Math.floor(i / 2);
+    ctx.fillText(tx.zeilen[i % tx.zeilen.length], P + p + spalte * (spW + gut), spaltenY + zeile * zeilenH, spW);
+  }
+  ctx.restore();
+  s.zug([
+    { x: P + W / 2, y: spaltenY - zeilenH * .35 }, { x: P + W / 2, y: spaltenY + Math.ceil(passt / 2) * zeilenH - zeilenH * .2 },
+  ], { spur: 'spalte', w: .8, deckung: .45, eckig: true });
+}
+
+function falte(s, P, W, fy) {
+  // 一道折痕：横贯纸面的压痕与错位高光，纸片被折过又摊平（正好压过肖像）
+  s.zug([{ x: P + 4, y: fy }, { x: P + W * .5, y: fy + 4 }, { x: P + W - 4, y: fy + 1 }],
+    { spur: 'falte', w: 1.1, deckung: .14, eckig: true });
+  s.zug([{ x: P + 4, y: fy + 2.5 }, { x: P + W - 4, y: fy + 3.5 }],
+    { spur: 'falteLicht', w: .8, deckung: .09, eckig: true, farbe: '#fffdf6' });
+}
+
+function stempel(tx, W, p, ax, ay, text) {
+  // 朱红印章：压在标题右端，双框 + 楷体，微微歪
+  ctx.save();
+  const stW = W * .14, stH = W * .1;
+  ctx.translate(ax, ay);
+  ctx.rotate(-.12);
+  ctx.strokeStyle = STEMPEL_ROT;
+  ctx.lineWidth = 2.2;
+  ctx.globalAlpha = .8;
+  ctx.strokeRect(-stW / 2, -stH / 2, stW, stH);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-stW / 2 + 3, -stH / 2 + 3, stW - 6, stH - 6);
+  ctx.fillStyle = STEMPEL_ROT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${Math.round(W * .034)}px "Kaiti", "STKaiti", "楷体", serif`;
+  ctx.fillText(text || tx.stempel, 0, 1);
+  ctx.restore();
+}
+
+/* —— 版式一 · 寻人启事：居中一帧大肖像（原版式原样搬入） —— */
+
+function zeichneSucht(t, s, tx, P, Q, W, H, p) {
   // 通栏标题
   ctx.save();
   ctx.textAlign = 'center';
@@ -166,50 +260,73 @@ function zeichneBlatt(t) {
   ctx.fillText(tx.lohn, P + W / 2, boxY + boxH + W * .09);
   ctx.restore();
 
-  // 双栏铅字：栏间一道细线，行距松，铅灰色
-  const spaltenY = boxY + boxH + W * .13;
-  const spaltenH = Q + H - p * 1.2 - spaltenY;
-  const gut = W * .05;
-  const spW = (W - p * 2 - gut) / 2;
-  const zeilenH = W * .05;
-  const passt = Math.max(2, Math.floor(spaltenH / zeilenH));
-  ctx.save();
-  ctx.font = `${Math.round(W * .024)}px "Courier New", monospace`;
-  ctx.fillStyle = '#6f6a63';
-  ctx.textBaseline = 'top';
-  for (let i = 0; i < passt; i++) {
-    const spalte = i % 2, zeile = Math.floor(i / 2);
-    ctx.fillText(tx.zeilen[i % tx.zeilen.length], P + p + spalte * (spW + gut), spaltenY + zeile * zeilenH, spW);
-  }
-  ctx.restore();
-  s.zug([
-    { x: P + W / 2, y: spaltenY - zeilenH * .35 }, { x: P + W / 2, y: spaltenY + Math.ceil(passt / 2) * zeilenH - zeilenH * .2 },
-  ], { spur: 'spalte', w: .8, deckung: .45, eckig: true });
+  spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .13);
+  falte(s, P, W, Q + H * .58);
+  stempel(tx, W, p, P + W - p - W * .077, Q + p + W * .21);
+}
 
-  // 一道折痕：横贯纸面的压痕与错位高光，纸片被折过又摊平（正好压过肖像）
-  const fy = Q + H * .58;
-  s.zug([{ x: P + 4, y: fy }, { x: P + W * .5, y: fy + 4 }, { x: P + W - 4, y: fy + 1 }],
-    { spur: 'falte', w: 1.1, deckung: .14, eckig: true });
-  s.zug([{ x: P + 4, y: fy + 2.5 }, { x: P + W - 4, y: fy + 3.5 }],
-    { spur: 'falteLicht', w: .8, deckung: .09, eckig: true, farbe: '#fffdf6' });
+/* —— 版式二 · 头版：通栏大标题 + 并排两帧小肖像（第二张脸 saat+1013） —— */
 
-  // 朱红印章：压在标题右端，双框 + 楷体，微微歪
+function zeichneFront(t, s, tx, P, Q, W, H, p) {
+  // 通栏大标题：字号比寻人版大一档，位置不动
   ctx.save();
-  const stW = W * .14, stH = W * .1;
-  ctx.translate(P + W - p - stW * .55, Q + p + W * .21);
-  ctx.rotate(-.12);
-  ctx.strokeStyle = STEMPEL_ROT;
-  ctx.lineWidth = 2.2;
-  ctx.globalAlpha = .8;
-  ctx.strokeRect(-stW / 2, -stH / 2, stW, stH);
-  ctx.lineWidth = 1;
-  ctx.strokeRect(-stW / 2 + 3, -stH / 2 + 3, stW - 6, stH - 6);
-  ctx.fillStyle = STEMPEL_ROT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `${Math.round(W * .034)}px "Kaiti", "STKaiti", "楷体", serif`;
-  ctx.fillText(tx.stempel, 0, 1);
+  ctx.fillStyle = '#2e2839';
+  ctx.font = `bold ${Math.round(W * .07)}px "Courier New", ui-monospace, monospace`;
+  ctx.fillText(tx.duoTitel, P + W / 2, Q + p + W * .21);
   ctx.restore();
+
+  // 并排两帧肖像：两框加一道中缝严格居中
+  const boxW = W * .4, boxH = W * .46, gut = W * .05;
+  const rahmenY = Q + p + W * .27;
+  const x1 = P + (W - boxW * 2 - gut) / 2, x2 = x1 + boxW + gut;
+  [[x1, 'portraitA'], [x2, 'portraitB']].forEach(([bx, spur]) => {
+    s.zug([
+      { x: bx, y: rahmenY }, { x: bx + boxW, y: rahmenY },
+      { x: bx + boxW, y: rahmenY + boxH }, { x: bx, y: rahmenY + boxH },
+    ], { spur, geschlossen: true, w: 1.2, deckung: .8 });
+  });
+  const brust = (h, bx) => {
+    const bedarf = raumBedarf(h);
+    h.mass = Math.min(boxW / (2 * bedarf.seite * 1.12), boxH / (bedarf.oben + 2.15));
+    h.cx = bx + boxW / 2;
+    h.cy = rahmenY + bedarf.oben * h.mass + boxH * .07;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bx, rahmenY, boxW, boxH);
+    ctx.clip();
+    drawHead(ctx, h, t);
+    ctx.restore();
+  };
+  brust(kopf, x1);
+  brust(kopf2, x2);
+
+  // 中缝竖排编者按（canvas 没有竖排，逐字下落）
+  ctx.save();
+  ctx.font = `${Math.round(W * .024)}px "Kaiti", "STKaiti", "楷体", serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#7a7268';
+  [...tx.duoNote].forEach((zi, i) => ctx.fillText(zi, x1 + boxW + gut / 2, rahmenY + W * .045 + i * W * .034));
+  ctx.restore();
+
+  // 图注两行：各报一人 + 通栏结论行
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${Math.round(W * .03)}px "Kaiti", "STKaiti", "楷体", serif`;
+  ctx.fillStyle = '#7a7268';
+  ctx.fillText(`图左：${tx.name}（本报摹绘）`, x1 + boxW / 2, rahmenY + boxH + W * .033);
+  ctx.fillText(`图右：${tx.name2}（读者供图）`, x2 + boxW / 2, rahmenY + boxH + W * .033);
+  ctx.fillStyle = '#2e2839';
+  ctx.font = `bold ${Math.round(W * .038)}px "Courier New", monospace`;
+  ctx.fillText(tx.duoLohn, P + W / 2, rahmenY + boxH + W * .075);
+  ctx.restore();
+
+  spalten(s, tx, P, Q, W, H, p, rahmenY + boxH + W * .115);
+  falte(s, P, W, Q + H * .47);   // 头版折痕压在两帧肖像的胸口带（避开框底的肩块裁切线）
+  stempel(tx, W, p, P + W - p - W * .077, Q + p + W * .215, tx.duoStempel);
 }
 
 /* ================= 主循环与按钮 ================= */
@@ -219,8 +336,10 @@ function rahmen(now) {
   const t = now / 1000;
   const dt = vorige ? Math.min(t - vorige, .05) : .016;
   vorige = t;
-  // 胸像也轻轻呼吸/眨眼：update 驱动状态，drawHead 读它
+  // 胸像也轻轻呼吸/眨眼：update 驱动状态，drawHead 读它；
+  // 头版第二张脸用死指针——只呼吸眨眼，不跟着鼠标转头
   kopf.update(dt, t, pointer);
+  kopf2.update(dt, t, TOTER_ZEIGER);
   papier();
   zeichneBlatt(t);
   requestAnimationFrame(rahmen);
@@ -239,6 +358,7 @@ requestAnimationFrame(rahmen);
 
 document.getElementById('neues').addEventListener('click', () => {
   kopf = neuesKopf((Math.random() * 1e9) | 0);
+  kopf2 = zweitKopf(saat + 1013);   // 头版第二张脸跟着换，别让脸和文案对不上
   try { history.replaceState(null, '', '?seed=' + saat); } catch (e) { /* file:// 可能拒绝 */ }
 });
 

@@ -469,7 +469,7 @@ const REGAL_DEKO = {
         const x0 = x - bw / 2 + r.range(-1, 1) * s * .04;
         const kip = r.range(-1, 1) * s * .045;
         st.line([[x0, yy], [x0 + bw, yy], [x0 + bw + kip, yy - bh], [x0 + kip, yy - bh]], 1.1, { label: lb + i, closed: true, alpha: .82 });
-        st.line([[x0 + bw * .52, yy], [x0 + bw * .52 + kip, yy - bh]], .7, { label: lb + 5 + i, alpha: .4 });
+        st.line([[x0 + bw * .52, yy], [x0 + bw * .52 + kip, yy - bh]], .7, { label: lb + 4 + i, alpha: .4 });   // 4+i ≤ 7，不撞下一槽基值
         yy -= bh * .92;
       }
     },

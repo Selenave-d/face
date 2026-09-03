@@ -2243,17 +2243,18 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
       { spur: 'kragen', w: .022, wackel: .004, farbe: pal.tinte });
   } else if (kragen === 'schal') {
     // 围巾：颈根一道宽绕弧 + 垂在肩前的一小头，尾端三笔流苏
+    // （垂头守在肩块下缘 ~.2l 之内：胸像模式没有身体接在下面，伸出去就是悬空）
     stift.zug([{ x: a.x - .1, y: a.y - .03 }, { x: mx, y: untenY + l * .13 }, { x: b.x + .1, y: b.y - .03 }],
       { spur: 'schal', w: .034, wackel: .004, farbe: pal.tinte });
-    stift.zug([{ x: a.x - .04, y: a.y + .04 }, { x: mx, y: untenY + l * .19 }, { x: b.x + .04, y: b.y + .04 }],
+    stift.zug([{ x: a.x - .04, y: a.y + .04 }, { x: mx, y: untenY + l * .17 }, { x: b.x + .04, y: b.y + .04 }],
       { spur: 'schal2', w: .026, wackel: .004, farbe: pal.tinte });
     const sx = mx + halb * .6;
-    stift.zug([{ x: sx - .045, y: untenY + l * .14 }, { x: sx - .06, y: untenY + l * .3 }, { x: sx - .02, y: untenY + l * .33 }],
+    stift.zug([{ x: sx - .045, y: untenY + l * .13 }, { x: sx - .06, y: untenY + l * .18 }, { x: sx - .02, y: untenY + l * .2 }],
       { spur: 'schal3', w: .026, wackel: .004, farbe: pal.tinte, eckig: true });
-    stift.zug([{ x: sx + .03, y: untenY + l * .14 }, { x: sx + .04, y: untenY + l * .27 }, { x: sx + .075, y: untenY + l * .3 }],
+    stift.zug([{ x: sx + .03, y: untenY + l * .13 }, { x: sx + .04, y: untenY + l * .16 }, { x: sx + .075, y: untenY + l * .18 }],
       { spur: 'schal4', w: .026, wackel: .004, farbe: pal.tinte, eckig: true });
     for (let i = 0; i < 3; i++) {
-      stift.zug([{ x: sx - .05 + i * .045, y: untenY + l * .32 }, { x: sx - .045 + i * .045, y: untenY + l * .37 }],
+      stift.zug([{ x: sx - .05 + i * .045, y: untenY + l * .195 }, { x: sx - .045 + i * .045, y: untenY + l * .21 }],
         { spur: `schalfranse${i}`, w: .018, wackel: .003, farbe: pal.tinte, einlagig: true });
     }
   }
