@@ -109,6 +109,7 @@ function blattGeometrie() {
 let uiStift = null, uiTick = -1;
 let txMemo = { seed: -1, tx: null };          // 文案按种子记忆：不每帧重掷
 let rissMemo = { key: '', pts: null };        // 撕纸边多边形同理（只随种子与尺寸变）
+let fleckMemo = { saat: -1, list: null };     // 陈年锈斑同理（只随种子变；位置存纸面分数，resize 重投影）
 
 function zeichneBlatt(t) {
   const g = blattGeometrie();
@@ -140,6 +141,29 @@ function zeichneBlatt(t) {
   // 纸纹回到纸片上：不透明纸色会把整页 grain 盖掉，趁路径还在补一层
   ctx.fillStyle = grainPattern;
   ctx.fill();
+  // 陈年锈斑（foxing）：3~6 个淡锈色小点压在全部墨迹之下，偏下半张（铅字栏最真实）；
+  // 旧斑干透了，不随 8fps 沸腾——与合影页"干了的墨渍"同一决策
+  if (fleckMemo.saat !== saat) {
+    const fr = strom(saat, 'fleck');
+    fleckMemo = {
+      saat,
+      list: Array.from({ length: 3 + Math.floor(fr.n() * 3.99) }, () => ({
+        fx: .08 + fr.n() * .84,
+        fy: .3 + fr.n() * .6,
+        gr: .012 + fr.n() * .022,             // 半径 ≈ 7~20px（W=600 时）
+        a: .04 + fr.n() * .03,                // 斑核不超 .07：再重就成牛皮纸了
+      })),
+    };
+  }
+  for (const f of fleckMemo.list) {
+    const cx = P + f.fx * W, cy = Q + f.fy * H;
+    for (const [k, da] of [[1, f.a], [.62, f.a * .8], [.34, f.a * .6]]) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, f.gr * W * k, 0, 7);
+      ctx.fillStyle = `rgba(160,120,70,${da.toFixed(3)})`;
+      ctx.fill();
+    }
+  }
   // 右下一点点投影线，纸片浮在桌面的暗示
   s.zug([
     { x: P + W + 3, y: Q + 6 }, { x: P + W + 3, y: Q + H + 3 }, { x: P + 6, y: Q + H + 3 },
@@ -198,7 +222,7 @@ function falte(s, P, W, fy) {
     { spur: 'falteLicht', w: .8, deckung: .09, eckig: true, farbe: '#fffdf6' });
 }
 
-function stempel(tx, W, p, ax, ay, text) {
+function stempel(tx, W, ax, ay, text) {
   // 朱红印章：压在标题右端，双框 + 楷体，微微歪
   ctx.save();
   const stW = W * .14, stH = W * .1;
@@ -262,18 +286,18 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .13);
   falte(s, P, W, Q + H * .58);
-  stempel(tx, W, p, P + W - p - W * .077, Q + p + W * .21);
+  stempel(tx, W, P + W - p - W * .077, Q + p + W * .21);
 }
 
 /* —— 版式二 · 头版：通栏大标题 + 并排两帧小肖像（第二张脸 saat+1013） —— */
 
 function zeichneFront(t, s, tx, P, Q, W, H, p) {
-  // 通栏大标题：字号比寻人版大一档，位置不动
+  // 通栏大标题：字号比寻人版大一档，位置不动；太长的标题按字数收字号，印章只压余白
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2e2839';
-  ctx.font = `bold ${Math.round(W * .07)}px "Courier New", ui-monospace, monospace`;
+  ctx.font = `bold ${Math.round(Math.min(W * .07, W * .84 / tx.duoTitel.length))}px "Courier New", ui-monospace, monospace`;
   ctx.fillText(tx.duoTitel, P + W / 2, Q + p + W * .21);
   ctx.restore();
 
@@ -302,13 +326,13 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
   brust(kopf, x1);
   brust(kopf2, x2);
 
-  // 中缝竖排编者按（canvas 没有竖排，逐字下落）
+  // 中缝竖排编者按（canvas 没有竖排，逐字下落；冒号横躺难看，换成间隔点）
   ctx.save();
   ctx.font = `${Math.round(W * .024)}px "Kaiti", "STKaiti", "楷体", serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#7a7268';
-  [...tx.duoNote].forEach((zi, i) => ctx.fillText(zi, x1 + boxW + gut / 2, rahmenY + W * .045 + i * W * .034));
+  [...tx.duoNote].forEach((zi, i) => ctx.fillText(zi === '：' ? '·' : zi, x1 + boxW + gut / 2, rahmenY + W * .045 + i * W * .034));
   ctx.restore();
 
   // 图注两行：各报一人 + 通栏结论行
@@ -326,7 +350,7 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, rahmenY + boxH + W * .115);
   falte(s, P, W, Q + H * .47);   // 头版折痕压在两帧肖像的胸口带（避开框底的肩块裁切线）
-  stempel(tx, W, p, P + W - p - W * .077, Q + p + W * .215, tx.duoStempel);
+  stempel(tx, W, P + W - p - W * .077, Q + p + W * .215, tx.duoStempel);
 }
 
 /* ================= 主循环与按钮 ================= */

@@ -353,7 +353,11 @@ function knips(t) {
   gesamt += ergebnis.punkte;
   bannerBis = t + 2;
   // 冲洗一张贴纸照片：记住这五个人和牌型
-  abzuege.push({ recs: [...gewaehlt].map((i) => kinder[i].rec), titel: ergebnis.name });
+  abzuege.push({
+    recs: [...gewaehlt].map((i) => kinder[i].rec),
+    titel: ergebnis.name,
+    datum: `${new Date().getMonth() + 1}月${new Date().getDate()}日`,   // 拍立得白带的手写日期
+  });
   if (abzuege.length > 3) abzuege.shift();
   phase = 'sprung';
   sprungT = t;
@@ -499,6 +503,33 @@ const REGAL_DEKO = {
       st.line([[x + bw * .46, y - bh * 1.42], [x + bw * .64, y - bh * 1.56]], 1.3, { label: lb + 5, alpha: .8 });
     },
   },
+  // 地球仪：球 + 经纬线 + 倾斜支架弧 + 底座立柱
+  globus: {
+    draw(st, x, y, s, r, lb) {
+      const cy = y - s * .3, rr = s * .17;
+      st.line(kreisPts(x, cy, rr, rr, 16, .04, 9), 1.1, { closed: true, label: lb, alpha: .8 });
+      st.line(bogenPts(x, cy, rr * .45, rr, Math.PI * .5, Math.PI * 1.5, 8), 1, { label: lb + 1, alpha: .5 });
+      st.line(bogenPts(x, cy, rr, rr * .3, Math.PI, Math.PI * 2, 8), 1, { label: lb + 2, alpha: .45 });
+      st.line(bogenPts(x, cy, rr * 1.2, rr * 1.24, Math.PI * 1.1, Math.PI * 1.9, 12), 1.1, { label: lb + 3, alpha: .8 });
+      st.line([[x - s * .08, y], [x + s * .08, y]], 1.2, { label: lb + 4, alpha: .85 });
+      st.line([[x, y - s * .05], [x, cy + rr * 1.02]], 1, { label: lb + 5, alpha: .55 });
+    },
+  },
+  // 立式相框：微歪外框 + 内框 + 一枚极简证件照小人 + 底座双支脚
+  rahmen: {
+    draw(st, x, y, s, r, lb) {
+      const fw = s * .18, fh = s * .28, fy = y - s * .05, kip = r.range(-1, 1) * .07;
+      st.line([[x - fw, fy], [x + fw, fy], [x + fw * (1 + kip), fy - fh], [x - fw * (1 + kip), fy - fh]],
+        1.1, { closed: true, label: lb, alpha: .85 });
+      st.line([[x - fw * .66, fy - fh * .14], [x + fw * .66, fy - fh * .14], [x + fw * .6, fy - fh * .84], [x - fw * .6, fy - fh * .84]],
+        .8, { closed: true, label: lb + 1, alpha: .45 });
+      st.line(kreisPts(x, fy - fh * .62, s * .045, s * .05, 8, .06, 4), 1, { label: lb + 2, alpha: .6 });
+      st.line(bogenPts(x, fy - fh * .42, s * .1, s * .05, Math.PI, Math.PI * 2, 6), 1, { label: lb + 3, alpha: .6 });
+      st.line([[x - fw * .6, y], [x + fw * .6, y]], 1.2, { label: lb + 4, alpha: .85 });
+      st.line([[x - fw * .35, fy], [x - fw * .3, y]], .8, { label: lb + 5, alpha: .5 });
+      st.line([[x + fw * .35, fy], [x + fw * .3, y]], .8, { label: lb + 6, alpha: .5 });
+    },
+  },
 };
 
 let dekoSaat = Math.floor(Math.random() * 1e9);
@@ -514,10 +545,11 @@ function regalDekoSlots() {
     }
     dekoMemo = {
       saat: dekoSaat,
-      slots: lucken.slice(0, 2 + Math.floor(r.n() * 1.9)).map((luck, i) => ({
+      // 五类物摊进 2~4 个空档（均值 3）：单类出现率才够看
+      slots: lucken.slice(0, 2 + Math.floor(r.n() * 2.9)).map((luck, i) => ({
         luck,
         reihe: r.n() < .55 ? 0 : 1,
-        typ: ['buecher', 'topf', 'becher'][Math.floor(r.n() * 3)],
+        typ: ['buecher', 'topf', 'becher', 'globus', 'rahmen'][Math.floor(r.n() * 5)],
         lb: 400 + i * 8,
       })),
     };
@@ -753,6 +785,15 @@ function zeichneAbzuege(t) {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#8b8894';
     ctx.fillText(ab.titel, w / 2, h - band / 2 + 1);
+    // 白带右端手写日期角标：拍立得在相纸边写日期的惯例
+    ctx.save();
+    ctx.translate(w - 16, h - band / 2 + 1);
+    ctx.rotate(-.06);
+    ctx.font = `${mob ? 7 : 8}px "Kaiti", "STKaiti", "楷体", serif`;
+    ctx.fillStyle = '#a89f93';
+    ctx.textAlign = 'right';
+    ctx.fillText(ab.datum, 0, 0);
+    ctx.restore();
     // 顶角两片胶带
     ctx.fillStyle = 'rgba(214,203,182,.55)';
     ctx.save();
