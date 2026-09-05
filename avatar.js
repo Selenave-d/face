@@ -42,6 +42,15 @@ function zeichneBuehne(t) {
     { x: b.x, y: b.y }, { x: b.x + b.s, y: b.y },
     { x: b.x + b.s, y: b.y + b.s }, { x: b.x, y: b.y + b.s },
   ], { spur: 'rahmen', geschlossen: true, w: 1.4, deckung: .8 });
+  // 四角裁切线：一张待裁切的证件照底片（导出走 avatarPNG，不带这些印刷标记）
+  const cm = 4, cl = 11;   // 外偏与线长都收在舞台两侧 ≥16px 的余量内
+  [[b.x, b.y, 1, 1], [b.x + b.s, b.y, -1, 1], [b.x, b.y + b.s, 1, -1], [b.x + b.s, b.y + b.s, -1, -1]]
+    .forEach(([ex, ey, sx, sy], i) => {
+      uiStift.zug([{ x: ex - sx * cm, y: ey - sy * cm }, { x: ex - sx * (cm + cl), y: ey - sy * cm }],
+        { spur: `beschnitt-h${i}`, w: 1, deckung: .5, eckig: true });
+      uiStift.zug([{ x: ex - sx * cm, y: ey - sy * cm }, { x: ex - sx * cm, y: ey - sy * (cm + cl) }],
+        { spur: `beschnitt-v${i}`, w: 1, deckung: .5, eckig: true });
+    });
   // 胸像：与一墙脸同一套裁切（带肩块），按帽子/发量自适应缩放
   const bedarf = raumBedarf(kopf);
   kopf.mass = b.s / (bedarf.oben + 2.25);

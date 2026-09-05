@@ -292,12 +292,12 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
 /* —— 版式二 · 头版：通栏大标题 + 并排两帧小肖像（第二张脸 saat+1013） —— */
 
 function zeichneFront(t, s, tx, P, Q, W, H, p) {
-  // 通栏大标题：字号比寻人版大一档，位置不动；太长的标题按字数收字号，印章只压余白
+  // 通栏大标题：字号比寻人版大一档，位置不动；按字数收字号让右端止于印章左缘（P+.783W）
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2e2839';
-  ctx.font = `bold ${Math.round(Math.min(W * .07, W * .84 / tx.duoTitel.length))}px "Courier New", ui-monospace, monospace`;
+  ctx.font = `bold ${Math.round(Math.min(W * .07, W * .55 / tx.duoTitel.length))}px "Courier New", ui-monospace, monospace`;
   ctx.fillText(tx.duoTitel, P + W / 2, Q + p + W * .21);
   ctx.restore();
 

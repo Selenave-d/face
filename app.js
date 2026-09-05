@@ -3099,6 +3099,14 @@ if (!WAND && !FOTO && !CROWD && !CLIP && !AVATAR) addEventListener('keydown', (e
   const i = '12345'.indexOf(e.key);
   if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
 });
+// 一墙脸 · 放大视图：1-5 直选表情（1 复原/2 笑/3 怒/4 难过/5 困），与头像页按钮同一套心智
+if (WAND) addEventListener('keydown', (e) => {
+  if (vergroessert < 0 || e.ctrlKey || e.metaKey || e.altKey) return;
+  const i = '12345'.indexOf(e.key);
+  if (i < 0) return;
+  const g = GESICHT_FOLGE[i];
+  heads[vergroessert].gesicht = g ? GESICHT_FORMEN[g] : null;
+});
 
 // foto / crowd 模式到这里为止：纸纹与 papier() 留用，排版与主循环交给 photo.js / crowd.js
 if (FOTO || CROWD || CLIP || AVATAR) {

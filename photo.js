@@ -507,7 +507,7 @@ const REGAL_DEKO = {
   globus: {
     draw(st, x, y, s, r, lb) {
       const cy = y - s * .3, rr = s * .17;
-      st.line(kreisPts(x, cy, rr, rr, 16, .04, 9), 1.1, { closed: true, label: lb, alpha: .8 });
+      st.line(kreisPts(x, cy, rr, rr, 16, .04, lb + 7), 1.1, { closed: true, label: lb, alpha: .8 });
       st.line(bogenPts(x, cy, rr * .45, rr, Math.PI * .5, Math.PI * 1.5, 8), 1, { label: lb + 1, alpha: .5 });
       st.line(bogenPts(x, cy, rr, rr * .3, Math.PI, Math.PI * 2, 8), 1, { label: lb + 2, alpha: .45 });
       st.line(bogenPts(x, cy, rr * 1.2, rr * 1.24, Math.PI * 1.1, Math.PI * 1.9, 12), 1.1, { label: lb + 3, alpha: .8 });

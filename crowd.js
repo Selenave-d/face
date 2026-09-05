@@ -109,7 +109,7 @@ function platzeLegen() {
 
   // 报得上名字的前 12 人：名字带离得太近的往下错一行（名字画在人群之上，见 rahmen）
   const gesetzt = [];
-  for (const p of plaetze.filter((q) => q.rang < 12).sort((a, b) => a.bodenY - b.bodenY)) {
+  for (const p of plaetze.filter((q) => q.rang <= 12).sort((a, b) => a.bodenY - b.bodenY)) {
     p.nameHub = 0;
     for (const b of gesetzt) {
       if (Math.abs(p.x - b.x) < 64 && Math.abs((p.bodenY + p.mass * .3) - (b.bodenY + b.mass * .3 + b.nameHub)) < 17) {
@@ -411,8 +411,10 @@ function rahmen(now) {
   const bt = Math.floor(t * 8);
   if (bodenTick !== bt) { bodenStift = makeStift(ctx, 555, UI_PAL.tinte, 1, bt); bodenTick = bt; }
   const bodenY = innerHeight - BODEN_RAUM + 5;
+  // 人多地陷：滑到八十人往上，地面线中点被慢慢压弯最多 6px——满 500 压到最低，
+  // 与全员起跳同框（wert 拖拽中连续，拱度实时渐变）
   bodenStift.zug(
-    [{ x: innerWidth * .04, y: bodenY }, { x: innerWidth * .5, y: bodenY + 3 }, { x: innerWidth * .96, y: bodenY }],
+    [{ x: innerWidth * .04, y: bodenY }, { x: innerWidth * .5, y: bodenY + 3 + 3 * clamp((wert - 80) / 420, 0, 1) }, { x: innerWidth * .96, y: bodenY }],
     { spur: 'bodenlinie', w: 1.4, deckung: .6, eckig: true });
 
   // 人群：站位顺序已是后→前，直接按序画，前排自然盖住后排的脚
