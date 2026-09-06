@@ -3053,6 +3053,18 @@ if (!FOTO && !CROWD && !CLIP && !AVATAR) {
   addEventListener('resize', layout);
   document.getElementById('neues')?.addEventListener('click', reshuffle);
   // 一墙脸：点一颗头放大居中；放大后点脸循环换表情、点空白处回整墙
+  // 单人页：点小人循环换表情（日常→笑→怒→难过→困）——落地页第一次本能动作就有回应；
+  // 命中测试与一墙脸同款（帽檐/afro 外扩）
+  if (!WAND) canvas.addEventListener('click', (e) => {
+    const head = heads[0];
+    if (!head) return;
+    const b = raumBedarf(head);
+    const dx = (e.clientX - head.cx) / head.mass, dy = (e.clientY - head.cy) / head.mass;
+    if (!(Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < 1.35 && dy > -b.oben * 1.05)) return;
+    const idx = GESICHT_FOLGE.findIndex((g) => g && head.gesicht === GESICHT_FORMEN[g]);
+    const next = idx >= 0 ? (idx + 1) % GESICHT_FOLGE.length : 1;
+    head.gesicht = GESICHT_FOLGE[next] ? GESICHT_FORMEN[GESICHT_FOLGE[next]] : null;
+  });
   if (WAND) canvas.addEventListener('click', (e) => {
     // 命中按各头帽子/发量外扩（帽檐宽、afro 高也算"这颗头"）
     const trifft = (h) => {
@@ -3099,8 +3111,15 @@ if (!WAND && !FOTO && !CROWD && !CLIP && !AVATAR) addEventListener('keydown', (e
   const i = '12345'.indexOf(e.key);
   if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
 });
-// 一墙脸 · 放大视图：1-5 直选表情（1 复原/2 笑/3 怒/4 难过/5 困），与头像页按钮同一套心智
+// 一墙脸 · 放大视图：1-5 直选表情（1 复原/2 笑/3 怒/4 难过/5 困），与头像页按钮同一套心智；
+// Escape 退出放大回整墙（退出时清表情，整墙是中性合影）
 if (WAND) addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && vergroessert >= 0) {
+    heads[vergroessert].gesicht = null;
+    vergroessert = -1;
+    layout();
+    return;
+  }
   if (vergroessert < 0 || e.ctrlKey || e.metaKey || e.altKey) return;
   const i = '12345'.indexOf(e.key);
   if (i < 0) return;

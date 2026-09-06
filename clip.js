@@ -141,6 +141,30 @@ function zeichneBlatt(t) {
   // 纸纹回到纸片上：不透明纸色会把整页 grain 盖掉，趁路径还在补一层
   ctx.fillStyle = grainPattern;
   ctx.fill();
+  // 边缘泛黄带：底边永远 + 种子随机再选一边（oben/links/rechts），两层内缩手绘线。
+  // 不做四边闭环（那是裱框的几何本质），只让纸的某两边"晒久了"；锈斑家族色，
+  // 单层套印严格 ≤.10/.05，压在全部墨迹之下、纸纹之上、锈斑之前。
+  // 189 个撕边点喂给 zug 会被重采样成 140 点的松弛波浪——正是黄晕该有的模糊边界
+  {
+    const esa = 3.2;                                              // 与撕边同一根尺子
+    const nW = Math.ceil(W / esa), nH = Math.ceil(H / esa);
+    const es = W * .022;                                          // 撕边振幅，同 rissMemo
+    const seite = strom(saat, 'randton').pick(['oben', 'links', 'rechts']);
+    const unten = rissMemo.pts.slice(nW + nH + 2, 2 * nW + nH + 3);            // 底边 R→L，永远画
+    const schnitt = {
+      oben: rissMemo.pts.slice(0, nW + 1),                        // L→R
+      links: rissMemo.pts.slice(2 * nW + nH + 3),                 // B→T（到数组尾）
+      rechts: rissMemo.pts.slice(nW + 1, nW + nH + 2),            // T→B
+    }[seite];
+    const gelb = (seg, d) => seg.map((pt) => ({                   // 向纸心内缩 d 像素
+      x: P + W / 2 + (pt[0] - P - W / 2) * (W - 2 * d) / W,
+      y: Q + H / 2 + (pt[1] - Q - H / 2) * (H - 2 * d) / H,
+    }));
+    for (const [seg, d, a, spur] of [
+      [unten, es, .10, 'randton1'], [unten, 1.8 * es, .05, 'randton2'],
+      [schnitt, es, .10, 'randton1'], [schnitt, 1.8 * es, .05, 'randton2'],
+    ]) s.zug(gelb(seg, d), { spur, w: 1.2, deckung: a, farbe: 'rgba(160,120,70,1)', einlagig: true });
+  }
   // 陈年锈斑（foxing）：3~6 个淡锈色小点压在全部墨迹之下，偏下半张（铅字栏最真实）；
   // 旧斑干透了，不随 8fps 沸腾——与合影页"干了的墨渍"同一决策
   if (fleckMemo.saat !== saat) {
@@ -292,7 +316,7 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
 /* —— 版式二 · 头版：通栏大标题 + 并排两帧小肖像（第二张脸 saat+1013） —— */
 
 function zeichneFront(t, s, tx, P, Q, W, H, p) {
-  // 通栏大标题：字号比寻人版大一档，位置不动；按字数收字号让右端止于印章左缘（P+.783W）
+  // 通栏大标题：位置不动；按字数收字号让右端止于印章左缘（P+.783W），短标题约与寻人版同号
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

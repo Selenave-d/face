@@ -397,8 +397,9 @@ function phaseTick(t) {
     for (const i of gewaehlt) {
       const kind = kinder[i];
       kind.zustand = 'geht'; kind.seit = t; kind.face = 'weint';
-      if (kind.rec.media === 'ink') {   // 墨水孩子走的时候渗一片墨渍在架子上
-        mauernFlecken.push({ x: kind.x, y: kind.footY - kind.k * .15, seed: kind.rec.seed, von: t });   // .15k：下缘吻住架子线
+      if (kind.rec.media === 'ink' || kind.rec.media === 'marker') {   // 墨水渗墨渍、马克笔蹭出划痕
+        mauernFlecken.push({ x: kind.x, y: kind.footY - kind.k * .15, seed: kind.rec.seed, von: t,
+          media: kind.rec.media, farbe: kind.rec.farbe });
         if (mauernFlecken.length > 8) mauernFlecken.shift();
       }
     }
@@ -730,13 +731,34 @@ function zeichneDraft(t) {
   }
 }
 
-// 墨渍：两三个交叠的歪圆，形状随种子定死（干了的墨不再沸腾），24 秒内慢慢淡去
+// 墨渍：两三个交叠的歪圆，形状随种子定死（干了的墨不再沸腾），24 秒内慢慢淡去；
+// 马克笔痕：两三杠粗圆头短线蹭在墙上——没盖笔帽的划痕，颜色用孩子自己的淡彩池
 function zeichneMauernFlecken(t) {
   for (let i = mauernFlecken.length - 1; i >= 0; i--) {
     const f = mauernFlecken[i];
     const alter = t - f.von;
     if (alter > 24) { mauernFlecken.splice(i, 1); continue; }
     const alpha = .26 * (1 - alter / 24);
+    if (f.media === 'marker') {
+      const rgb = WASH_POOL[Math.min(WASH_POOL.length - 1, Math.floor((f.farbe ?? .5) * WASH_POOL.length))];
+      const r = strom(f.seed, 'kratzen');
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${.2 * (1 - alter / 24)})`;
+      const n = 2 + Math.floor(r.n() * 1.9);
+      for (let j = 0; j < n; j++) {
+        const laenge = 14 + r.n() * 20;
+        const winkel = (r.n() - .5) * 1.1;
+        const ox = (r.n() - .5) * 26, oy = (r.n() - .5) * 14;
+        ctx.lineWidth = 6 + r.n() * 3;
+        ctx.beginPath();
+        ctx.moveTo(f.x + ox - Math.cos(winkel) * laenge / 2, f.y + oy - Math.sin(winkel) * laenge / 2);
+        ctx.lineTo(f.x + ox + Math.cos(winkel) * laenge / 2, f.y + oy + Math.sin(winkel) * laenge / 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      continue;
+    }
     ctx.save();
     for (const [dx, dy, r] of [[0, 0, 16], [10, 6, 9], [-9, 8, 7]]) {
       const pts = kreisPts(f.x + dx, f.y + dy, r, r * .8, 12, .22, f.seed + dx);
