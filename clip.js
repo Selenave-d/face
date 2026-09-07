@@ -1,5 +1,6 @@
-/* 纸上的小人 · 报纸剪报 —— 寻人启事/头版双肖像生成器
- * 一张竖版剪报，版式由种子分派：寻人启事（居中一帧胸像）或头版（通栏大标题 + 并排两帧）。
+/* 纸上的小人 · 报纸剪报 —— 寻人启事/头版双肖像/寻物启事生成器
+ * 一张竖版剪报，版式由种子三路分派：寻人启事（居中一帧胸像）、头版（通栏大标题 + 并排两帧）
+ * 或寻物启事（左上虚线框失物照 + 右侧特征三条与目击地点）。
  * 报头 + 日期栏 + 通栏标题 + 手绘胸像（app.js 引擎，带肩块的胸像裁切）
  * + 双栏铅字假文 + 悬赏行 + 朱红印章 + 折痕 + 撕纸边。
  * ?seed=N 同种子同剪报；「存图片」导出 PNG（纯 canvas，零依赖）。
@@ -69,6 +70,19 @@ const DUO_NOTIZ = [
 ];
 const DUO_LOHN = ['悬赏：水果糖陆颗', '悬赏：橡皮一整块', '酬谢：贴纸肆张', '悬赏：瓜子两把'];
 const DUO_STEMPEL = ['已核实', '独家', '号外', '首发'];
+// 寻物启事（人当物寻的玩笑版式）专用文案
+const VERLOREN_TITEL = [
+  (name) => `${name}不见了`, (name) => `谁见过${name}`, (name) => `${name}走丢了`,
+  (name) => `寻物：${name}`, (name) => `急寻${name}`, (name) => `${name}遗失启事`,
+];
+const MERKMALE = [
+  '笑起来有酒窝', '常戴一顶帽子', '走路喜欢看云', '说话先眨一下眼',
+  '口袋总装着水果糖', '爱用铅笔不用尺', '雨天从不带伞', '会把纸折成小船',
+  '习惯坐靠窗的位置', '哼歌经常跑调', '笑起来先捂嘴', '鞋带总是松的',
+];
+const ORTE = ['图书馆三楼', '操场东侧', '文具店门口', '传达室窗台', '梧桐树底下', '楼梯转角处', '公交站长椅', '小卖部柜台'];
+const VERLOREN_LOHN = ['拾到有酬：水果糖壹颗', '面谢：热茶一杯', '重谢：贴纸叁张', '拾到有酬：橡皮半块', '谢礼：手绘书签一枚', '重谢：饼干两块'];
+const VERLOREN_STEMPEL = ['寻物', '急寻', '悬赏', '有偿'];
 
 function texte(seed) {
   const r = strom(seed, 'text');
@@ -90,6 +104,19 @@ function texte(seed) {
     duoNote: strom(seed, 'duoNote').pick(DUO_NOTIZ),
     duoLohn: strom(seed, 'duoLohn').pick(DUO_LOHN),
     duoStempel: strom(seed, 'duoStempel').pick(DUO_STEMPEL),
+    // 寻物版字段：同样全部独立 label 流；特征三条用部分洗牌（Fisher-Yates 前三步）保证不重
+    verlorenTitel: strom(seed, 'vTitel').pick(VERLOREN_TITEL)(name),
+    merkmale: (() => {
+      const r = strom(seed, 'merkmale'), w = [...MERKMALE];
+      for (let i = 0; i < 3; i++) {
+        const j = i + Math.floor(r.n() * (w.length - i));
+        [w[i], w[j]] = [w[j], w[i]];
+      }
+      return w.slice(0, 3);
+    })(),
+    ort: strom(seed, 'vOrt').pick(ORTE),
+    verlorenLohn: strom(seed, 'vLohn').pick(VERLOREN_LOHN),
+    verlorenStempel: strom(seed, 'vStempel').pick(VERLOREN_STEMPEL),
   };
 }
 
@@ -190,7 +217,7 @@ function zeichneBlatt(t) {
   }
   // 右下投影线，纸片浮在桌面的暗示——偏移量越过撕边振幅（W*.022），
   // 让线稳定落在纸外的桌面上，而不是一半压在撕边填充上读成描边
-  const schattenAb = W * .016 + 2;
+  const schattenAb = W * .022 + 2;
   s.zug([
     { x: P + W + schattenAb, y: Q + 6 }, { x: P + W + schattenAb, y: Q + H + schattenAb }, { x: P + 6, y: Q + H + schattenAb },
   ], { spur: 'schatten', w: 1.4, deckung: .12, eckig: true });
@@ -212,9 +239,12 @@ function zeichneBlatt(t) {
   s.zug([{ x: P + p, y: Q + p + W * .14 }, { x: P + W - p, y: Q + p + W * .14 }], { spur: 'linie-a', w: 1.3, deckung: .8, eckig: true });
   s.zug([{ x: P + p, y: Q + p + W * .155 }, { x: P + W - p, y: Q + p + W * .155 }], { spur: 'linie-b', w: .8, deckung: .5, eckig: true });
 
-  // 版式由种子分派：寻人启事（单肖像）或头版（双肖像），同种子永远是同一版
-  if (strom(saat, 'layout').n() < .5) zeichneFront(t, s, tx, P, Q, W, H, p);
-  else zeichneSucht(t, s, tx, P, Q, W, H, p);
+  // 版式由种子三路分派：寻人启事（单肖像）/ 头版（双肖像）/ 寻物启事（虚线框+特征），
+  // 权重 4:3:3——寻人是招牌版式保多数；同种子永远是同一版
+  const lz = strom(saat, 'layout').n();
+  if (lz < .4) zeichneSucht(t, s, tx, P, Q, W, H, p);
+  else if (lz < .7) zeichneFront(t, s, tx, P, Q, W, H, p);
+  else zeichneVerloren(t, s, tx, P, Q, W, H, p);
 }
 
 /* —— 两种版式共用的三件套：双栏铅字 / 折痕 / 印章，只是落点不同 —— */
@@ -246,6 +276,27 @@ function falte(s, P, W, fy) {
     { spur: 'falte', w: 1.1, deckung: .14, eckig: true });
   s.zug([{ x: P + 4, y: fy + 2.5 }, { x: P + W - 4, y: fy + 3.5 }],
     { spur: 'falteLicht', w: .8, deckung: .09, eckig: true, farbe: '#fffdf6' });
+}
+
+// 虚线框（寻物启事的"失物缩略照"）：按边独立取整地逐段模拟。
+// 全部段共用一个 spur——44 段共享同一张噪声表，整圈同相位呼吸，读作一笔画成的一个物
+function gestrichelt(s, x, y, bw, bh, spur, pitch, anteil = .6) {
+  const kanten = [
+    [{ x, y }, { x: x + bw, y }], [{ x: x + bw, y }, { x: x + bw, y: y + bh }],
+    [{ x: x + bw, y: y + bh }, { x, y: y + bh }], [{ x, y: y + bh }, { x, y }],
+  ];
+  for (const [a, e] of kanten) {
+    const len = Math.hypot(e.x - a.x, e.y - a.y);
+    const n = Math.max(2, Math.round(len / pitch));   // 该边段数
+    const t = len / n;
+    for (let i = 0; i < n; i++) {
+      const u0 = i * t, u1 = (i + anteil) * t;        // 实线占节距的 anteil
+      s.zug([
+        { x: a.x + (e.x - a.x) * u0 / len, y: a.y + (e.y - a.y) * u0 / len },
+        { x: a.x + (e.x - a.x) * u1 / len, y: a.y + (e.y - a.y) * u1 / len },
+      ], { spur, w: 1.2, deckung: .8, eckig: true });
+    }
+  }
 }
 
 function stempel(tx, W, ax, ay, text) {
@@ -377,6 +428,62 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
   spalten(s, tx, P, Q, W, H, p, rahmenY + boxH + W * .115);
   falte(s, P, W, Q + H * .47);   // 头版折痕压在两帧肖像的胸口带（避开框底的肩块裁切线）
   stempel(tx, W, P + W - p - W * .077, Q + p + W * .215, tx.duoStempel);
+}
+
+/* —— 版式三 · 寻物启事：左上失物缩略照（虚线框）+ 右侧特征三条与目击地点 —— */
+
+function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
+  // 通栏标题：与寻人版同字号位置，超长按字数兜底收
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2e2839';
+  ctx.font = `bold ${Math.round(Math.min(W * .062, W * .6 / tx.verlorenTitel.length))}px "Courier New", ui-monospace, monospace`;
+  ctx.fillText(tx.verlorenTitel, P + W / 2, Q + p + W * .21);
+  ctx.restore();
+
+  // 左上小肖像：虚线框里的"失物缩略照"（证件照式满框）
+  const boxW = W * .3, boxH = W * .35;
+  const boxX = P + p, boxY = Q + p + W * .27;
+  gestrichelt(s, boxX, boxY, boxW, boxH, 'fundrahmen', W * .03);
+  const bedarf = raumBedarf(kopf);
+  kopf.mass = Math.min(boxW / (2 * bedarf.seite * 1.12), boxH / (bedarf.oben + 2.15));
+  kopf.cx = boxX + boxW / 2;
+  kopf.cy = boxY + bedarf.oben * kopf.mass + boxH * .07;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(boxX, boxY, boxW, boxH);
+  ctx.clip();
+  drawHead(ctx, kopf, t);
+  ctx.restore();
+
+  // 右侧特征文区：三条"· 特征"楷体 + 一行最后目击
+  const rx = boxX + boxW + W * .045, ry = boxY + W * .012;
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `${Math.round(W * .03)}px "Kaiti", "STKaiti", "楷体", serif`;
+  ctx.fillStyle = '#2e2839';
+  tx.merkmale.forEach((m, i) => ctx.fillText(`· ${m}`, rx, ry + i * W * .052, W * .515));
+  ctx.font = `bold ${Math.round(W * .03)}px "Courier New", monospace`;
+  ctx.fillText(`最后目击：${tx.ort}`, rx, ry + 3 * W * .052, W * .515);
+  ctx.restore();
+
+  // 框下图注 + 通栏酬谢行
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${Math.round(W * .026)}px "Kaiti", "STKaiti", "楷体", serif`;
+  ctx.fillStyle = '#7a7268';
+  ctx.fillText(`图：${tx.name}（近似）`, boxX + boxW / 2, boxY + boxH + W * .032, boxW);
+  ctx.fillStyle = '#2e2839';
+  ctx.font = `bold ${Math.round(W * .038)}px "Courier New", monospace`;
+  ctx.fillText(tx.verlorenLohn, P + W / 2, boxY + boxH + W * .075);
+  ctx.restore();
+
+  spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .115);
+  falte(s, P, W, Q + H * .44);   // 折痕压在小肖像胸口带（框高 73% 处，避开框底虚线）
+  stempel(tx, W, P + W - p - W * .077, Q + p + W * .21, tx.verlorenStempel);
 }
 
 /* ================= 主循环与按钮 ================= */

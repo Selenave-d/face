@@ -725,7 +725,7 @@ function zeichneDraft(t) {
   ctx.font = '13px "Kaiti", "STKaiti", "楷体", serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = warten > 4 && Math.sin(t * 5) > 0 ? '#b0654a' : '#8b8894';
-  ctx.fillText(warten > 6 ? '不点就自动收左边了…' : '点 一 张 收 下 （← → 也行）', innerWidth / 2, kartenLayout()[0].y - 22);
+  ctx.fillText(warten > 6 ? '不点就自动收左边了…' : '点 一 张 收 下 （← → 或 1 2）', innerWidth / 2, kartenLayout()[0].y - 22);
   ctx.restore();
   const l = kartenLayout();
   for (let i = 0; i < 2; i++) {

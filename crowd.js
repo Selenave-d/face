@@ -295,6 +295,7 @@ function machRakete(t) {
 
 function feierTick(t) {
   const voll = wert >= 499.5;
+  zaehlerEl.classList.toggle('voll', voll);   // 满 500：计数器与烟花一起换上暖橘红，拉回即复原
   if (voll && !feier) {
     feier = true;
     sprungBei = 0;
