@@ -188,9 +188,11 @@ function zeichneBlatt(t) {
       ctx.fill();
     }
   }
-  // 右下一点点投影线，纸片浮在桌面的暗示
+  // 右下投影线，纸片浮在桌面的暗示——偏移量越过撕边振幅（W*.022），
+  // 让线稳定落在纸外的桌面上，而不是一半压在撕边填充上读成描边
+  const schattenAb = W * .016 + 2;
   s.zug([
-    { x: P + W + 3, y: Q + 6 }, { x: P + W + 3, y: Q + H + 3 }, { x: P + 6, y: Q + H + 3 },
+    { x: P + W + schattenAb, y: Q + 6 }, { x: P + W + schattenAb, y: Q + H + schattenAb }, { x: P + 6, y: Q + H + schattenAb },
   ], { spur: 'schatten', w: 1.4, deckung: .12, eckig: true });
 
   // 报头 + 日期栏

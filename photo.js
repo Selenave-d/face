@@ -279,6 +279,15 @@ canvas.addEventListener('click', (e) => {
   waehle(kindBei(e.clientX, e.clientY), t);
 });
 
+/* 二选一也可用键盘：←/1 选左卡，→/2 选右卡（与点卡、8 秒自动收卡共用 draftPick） */
+addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const i = { ArrowLeft: 0, '1': 0, ArrowRight: 1, '2': 1 }[e.key];
+  if (i === undefined || phase !== 'draft' || !draft || draft.wahl >= 0) return;
+  e.preventDefault();
+  draftPick(i, performance.now() / 1000);
+});
+
 /* 长按逗一下：按住一个孩子 ~0.4s 循环换表情（单击仍是选择/取消，互不干扰） */
 const FOLGE = ['ruhig', 'froh', 'boese', 'angst', 'weint', 'schlaeft'];
 let klickSperre = false;
@@ -716,7 +725,7 @@ function zeichneDraft(t) {
   ctx.font = '13px "Kaiti", "STKaiti", "楷体", serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = warten > 4 && Math.sin(t * 5) > 0 ? '#b0654a' : '#8b8894';
-  ctx.fillText(warten > 6 ? '不点就自动收左边了…' : '点 一 张 收 下', innerWidth / 2, kartenLayout()[0].y - 22);
+  ctx.fillText(warten > 6 ? '不点就自动收左边了…' : '点 一 张 收 下 （← → 也行）', innerWidth / 2, kartenLayout()[0].y - 22);
   ctx.restore();
   const l = kartenLayout();
   for (let i = 0; i < 2; i++) {
