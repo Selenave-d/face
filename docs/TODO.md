@@ -3,3 +3,4 @@
 > 自动维护任务的选题池：做完一条删一条；也欢迎手动补。
 
 1. 去重：doodle.js / app.js 两套 RNG 与笔引擎、三页复制的标题 CSS（建议攒一次手动会话专门做）
+2. heads 整墙悬停反馈：trifft 提升为模块级 + 悬停头 3% 缓放（锚点 cx/nameY）+ 光标 crosshair↔pointer，约 20 行（方案已评估）

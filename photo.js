@@ -545,7 +545,7 @@ const REGAL_DEKO = {
 let dekoSaat = Math.floor(Math.random() * 1e9);
 let dekoMemo = { saat: -1, slots: null };
 
-function regalDekoSlots() {
+function regalDekoSlots(t) {
   if (dekoMemo.saat !== dekoSaat) {
     const r = strom(dekoSaat, 'deko');
     const lucken = [0, 1, 2, 3];   // 孩子槽位之间的四个空档（宽度的 20/40/60/80%）
@@ -555,6 +555,7 @@ function regalDekoSlots() {
     }
     dekoMemo = {
       saat: dekoSaat,
+      seit: t,   // 陈设摆上货架的时刻——换班后 0.3 秒弹入
       // 五类物摊进 2~4 个空档（均值 3）：单类出现率才够看
       slots: lucken.slice(0, 2 + Math.floor(r.n() * 2.9)).map((luck, i) => ({
         luck,
@@ -570,12 +571,21 @@ function regalDekoSlots() {
 function zeichneRegalDeko(t) {
   if (innerWidth < 640) return;   // 窄屏孩子已彼此相叠，空档放不下东西
   const st = requisitStift(t);
-  for (const s of regalDekoSlots()) {
+  for (const s of regalDekoSlots(t)) {
     const x = innerWidth * (s.luck + 1) / KINDER_PRO_REIHE;
     const y = innerHeight * (s.reihe === 0 ? .5 : .8) + 5;   // 底边吻住架子线
+    // 换班弹入：从架子线这一点缩小起步、过冲 5% 落定（二选一卡片同族曲线）；
+    // 走 transform 而非 alpha——笔刷自己管理透明度，缩放对它零侵入
+    const ein = Math.min(1, (t - dekoMemo.seit) / .3);
+    const k = .72 + .28 * ein + .18 * Math.sin(ein * Math.PI);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(k, k);
+    ctx.translate(-x, -y);
     // 每槽一条独立的参数流：每帧从头重放，物体形状逐帧稳定
     REGAL_DEKO[s.typ].draw(st, x, y, innerHeight * (s.reihe === 0 ? .055 : .075),
       strom(dekoSaat + s.luck * 197 + s.reihe * 31, 'deko'), s.lb);
+    ctx.restore();
   }
 }
 

@@ -57,6 +57,28 @@ function zeichneBuehne(t) {
   kopf.cx = b.x + b.s / 2;
   kopf.cy = b.y + bedarf.oben * kopf.mass + b.s * .07;
   drawHead(ctx, kopf, t);
+  // 存档印章：点「存头像」后 1.2 秒，舞台右下角盖一枚朱红「存」章——
+  // 前 0.15s 从 1.18 倍缩到 1（盖下去的手感），末 0.35s 淡出；导出走 avatarPNG 的离屏画布，不会带上它
+  if (t < stempelBis) {
+    const rest = stempelBis - t;
+    const k = 1 + Math.max(0, (rest - 1.05) / .15) * .18;
+    ctx.save();
+    ctx.translate(b.x + b.s - 40, b.y + b.s - 34);
+    ctx.rotate(-.14);
+    ctx.scale(k, k);
+    ctx.globalAlpha = .85 * Math.min(1, rest / .35);
+    ctx.strokeStyle = '#b0654a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-15, -11, 30, 22);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-12.5, -8.5, 25, 17);
+    ctx.fillStyle = '#b0654a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '14px "Kaiti", "STKaiti", "楷体", serif';
+    ctx.fillText('存', 0, 1);
+    ctx.restore();
+  }
   return b;
 }
 
@@ -171,6 +193,10 @@ document.getElementById('neues').addEventListener('click', () => {
   setTimeout(frisch, 100);
 });
 
+// 存档印章的显示期限与按钮文字还原计时
+let stempelBis = 0;
+let speicherTextZurueck = 0;
+
 document.getElementById('speicher').addEventListener('click', () => {
   const url = avatarPNG();          // 永远现算：不吃可能过期的延迟快照
   window.__avatarPNG = url;
@@ -178,6 +204,12 @@ document.getElementById('speicher').addEventListener('click', () => {
   a.href = url;
   a.download = `papier-avatar-${saat}.png`;
   a.click();
+  // 反馈：舞台盖「存」章 + 按钮短促变字（连点防抖：只还原最后一次）
+  stempelBis = performance.now() / 1000 + 1.2;
+  const btn = document.getElementById('speicher');
+  btn.textContent = '已 存 下';
+  clearTimeout(speicherTextZurueck);
+  speicherTextZurueck = setTimeout(() => { btn.textContent = '存 头 像'; }, 1400);
 });
 
 // 逗它：按钮触发（表情/视线为开关，主按钮样式的「回神」清空），点画布随机来一个

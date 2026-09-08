@@ -139,7 +139,7 @@ function noiseAt(arr, u) {
   return seg(0, STIFT_GROB, u) + .35 * seg(STIFT_GROB, STIFT_FEIN, u);
 }
 
-// 去重 → （可选）Catmull-Rom 平滑 → 按弧长 0.022 重采样
+// 去重 → （可选）Catmull-Rom 平滑 → 按弧长 0.028 重采样
 function stiftResample(pts, closed, glatt) {
   let src = pts;
   if (!closed) {

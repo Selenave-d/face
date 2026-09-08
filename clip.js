@@ -241,7 +241,7 @@ function zeichneBlatt(t) {
 
   // 版式由种子三路分派：寻人启事（单肖像）/ 头版（双肖像）/ 寻物启事（虚线框+特征），
   // 权重 4:3:3——寻人是招牌版式保多数；同种子永远是同一版
-  const lz = strom(saat, 'layout').n();
+  const lz = strom(saat, 'ausgabe').n();   // 'ausgabe'：与 makeDNA 的 'layout' 流解耦，版式不挑脸的基因带
   if (lz < .4) zeichneSucht(t, s, tx, P, Q, W, H, p);
   else if (lz < .7) zeichneFront(t, s, tx, P, Q, W, H, p);
   else zeichneVerloren(t, s, tx, P, Q, W, H, p);
@@ -522,8 +522,8 @@ document.getElementById('neues').addEventListener('click', () => {
 // 存图片：把剪报区域从主画布裁出导出 PNG（零依赖）；四周外扩一点，撕纸边完整入图
 document.getElementById('speicher').addEventListener('click', () => {
   const g = blattGeometrie();
-  const ex = Math.max(0, g.x - g.w * .03), ey = Math.max(0, g.y - g.w * .03);
-  const ew = Math.min(innerWidth - ex, g.w * 1.06), eh = Math.min(innerHeight - ey, g.h + g.w * .06);
+  const ex = Math.max(0, g.x - g.w * .035), ey = Math.max(0, g.y - g.w * .035);
+  const ew = Math.min(innerWidth - ex, g.w * 1.07), eh = Math.min(innerHeight - ey, g.h + g.w * .07);
   const out = document.createElement('canvas');
   out.width = Math.round(ew * 2);
   out.height = Math.round(eh * 2);
