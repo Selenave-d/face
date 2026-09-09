@@ -3036,6 +3036,7 @@ function layout() {
 function reshuffle() {
   baseSeed = Math.floor(Math.random() * 1e9);
   vergroessert = -1;   // 换版回整墙（放大索引指向的头已不存在）
+  if (!WAND) wechselT = performance.now() / 1000;   // 单人页：新人落纸弹一下；整墙换版保持安静
   heads = [];
   layout();
   try { history.replaceState(null, '', '?seed=' + baseSeed); } catch (e) { /* file:// 等环境可能拒绝改 query */ }
@@ -3053,28 +3054,18 @@ if (!FOTO && !CROWD && !CLIP && !AVATAR) {
   addEventListener('resize', layout);
   document.getElementById('neues')?.addEventListener('click', reshuffle);
   // 一墙脸：点一颗头放大居中；放大后点脸循环换表情、点空白处回整墙
-  // 单人页：点小人循环换表情（日常→笑→怒→难过→困）——落地页第一次本能动作就有回应；
-  // 命中测试与一墙脸同款（帽檐/afro 外扩）
+  // 单人页：点小人循环换表情（日常→笑→怒→难过→困）——落地页第一次本能动作就有回应
   if (!WAND) canvas.addEventListener('click', (e) => {
     const head = heads[0];
-    if (!head) return;
-    const b = raumBedarf(head);
-    const dx = (e.clientX - head.cx) / head.mass, dy = (e.clientY - head.cy) / head.mass;
-    if (!(Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < 1.35 && dy > -b.oben * 1.05)) return;
+    if (!head || !trifftGezeichnet(head, e.clientX, e.clientY)) return;
     const idx = GESICHT_FOLGE.findIndex((g) => g && head.gesicht === GESICHT_FORMEN[g]);
     const next = idx >= 0 ? (idx + 1) % GESICHT_FOLGE.length : 1;
     head.gesicht = GESICHT_FOLGE[next] ? GESICHT_FORMEN[GESICHT_FOLGE[next]] : null;
   });
   if (WAND) canvas.addEventListener('click', (e) => {
-    // 命中按各头帽子/发量外扩（帽檐宽、afro 高也算"这颗头"）
-    const trifft = (h) => {
-      const b = raumBedarf(h);
-      const dx = (e.clientX - h.cx) / h.mass, dy = (e.clientY - h.cy) / h.mass;
-      return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < 1.35 && dy > -b.oben * 1.05;
-    };
     if (vergroessert >= 0) {
       const head = heads[vergroessert];
-      if (head && trifft(head)) {
+      if (head && trifftGezeichnet(head, e.clientX, e.clientY)) {
         const idx = GESICHT_FOLGE.findIndex((g) => g && head.gesicht === GESICHT_FORMEN[g]);
         const next = idx >= 0 ? (idx + 1) % GESICHT_FOLGE.length : 1;
         head.gesicht = GESICHT_FOLGE[next] ? GESICHT_FORMEN[GESICHT_FOLGE[next]] : null;
@@ -3087,7 +3078,7 @@ if (!FOTO && !CROWD && !CLIP && !AVATAR) {
     }
     let best = -1, bestD = 1e9;
     heads.forEach((h, i) => {
-      if (!trifft(h)) return;
+      if (!trifftGezeichnet(h, e.clientX, e.clientY)) return;
       const d = Math.hypot(e.clientX - h.cx, e.clientY - h.cy) / h.mass;
       if (d < bestD) { bestD = d; best = i; }
     });
@@ -3163,7 +3154,23 @@ function bodenZeichnen(t, head) {
   }
 }
 
+// 命中测试：帽檐宽、afro 高也算"这颗头"——量的是未缩放的本地坐标。
+// 模块级（frame 也要用，不能藏在事件注册块的作用域里）
+const trifftKopf = (h, x, y) => {
+  const b = raumBedarf(h);
+  const dx = (x - h.cx) / h.mass, dy = (y - h.cy) / h.mass;
+  return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < 1.35 && dy > -b.oben * 1.05;
+};
+
+// 命中前先把指针按"画出去的缩放"反算回本地（锚与 frame 的 transform 完全一致：脚边 nameY），
+// 悬停 3% 缓放、换人落纸弹入期间，画面多大命中区就多大——悬停与点击共用这一把尺
+const trifftGezeichnet = (h, x, y) => {
+  const k = h.zeigK || 1;
+  return trifftKopf(h, h.cx + (x - h.cx) / k, h.nameY + (y - h.nameY) / k);
+};
+
 let prev = performance.now();
+let wechselT = -9;   // 上次「换一个」的时刻：新人 0.25s 从 85% 弹到落定，与合影卡片/架子陈设同族曲线
 function frame(now) {
   const dt = Math.min((now - prev) / 1000, .05);
   prev = now;
@@ -3173,10 +3180,37 @@ function frame(now) {
   papier();
   if (!WAND) bodenZeichnen(t, heads[0]);
   const zuZeichnen = (WAND && vergroessert >= 0) ? [heads[vergroessert]] : heads;
-  for (const head of zuZeichnen) {
-    head.update(dt, t, pointer);
-    drawHead(ctx, head, t);
+  // 悬停反馈：最贴指针的那颗（个）头 3% 缓放 + 光标变 pointer——"这是可以点的"终于看得见；
+  // 缓动而不是硬切，走 transform 不碰 mass（视线距离/笔缓存都不抖）；
+  // 放大视图不参与（其它头还带着墙上的旧坐标，且大脸自有点击表情的故事）
+  let hoverIdx = -1;
+  if (pointer.active && !(WAND && vergroessert >= 0)) {
+    let bestD = 1e9;
+    heads.forEach((h, i) => {
+      if (!trifftGezeichnet(h, pointer.x, pointer.y)) return;
+      const d = Math.hypot(pointer.x - h.cx, pointer.y - h.cy) / h.mass;
+      if (d < bestD) { bestD = d; hoverIdx = i; }
+    });
   }
+  canvas.style.cursor = hoverIdx >= 0 ? 'pointer' : 'crosshair';
+  zuZeichnen.forEach((head, i) => {
+    head.update(dt, t, pointer);
+    head.hoverA = (head.hoverA ?? 0) + ((i === hoverIdx ? 1 : 0) - (head.hoverA ?? 0)) * Math.min(1, dt * 10);
+    const wE = Math.min(1, Math.max(0, (t - wechselT) / .25));
+    const wk = .85 + .15 * wE + .12 * Math.sin(wE * Math.PI);   // 换人落定：85% 起步、约 5% 过冲，transform 不碰 mass
+    const k = (1 + .03 * head.hoverA) * wk;
+    head.zeigK = k;   // 记给命中反算用：画面缩放多少，命中区就是多少
+    if (k > 1.0005 || k < .9995) {
+      ctx.save();
+      ctx.translate(head.cx, head.nameY);   // 锚在脚边：头从肩膀处微微"站起来朝向你"
+      ctx.scale(k, k);
+      ctx.translate(-head.cx, -head.nameY);
+      drawHead(ctx, head, t);
+      ctx.restore();
+    } else {
+      drawHead(ctx, head, t);
+    }
+  });
   if (WAND && window.__wand) {
     window.__wand.vergroessert = vergroessert;
     window.__wand.gesichtKey = vergroessert >= 0 && heads[vergroessert]
