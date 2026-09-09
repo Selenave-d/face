@@ -975,6 +975,7 @@ function rahmen(now) {
 }
 
 function resize() {
+  dpr = Math.min(devicePixelRatio || 1, 2);   // 跨 DPI/浏览器缩放后位图不糊
   canvas.width = Math.floor(innerWidth * dpr);
   canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width = innerWidth + 'px';
