@@ -233,7 +233,7 @@ function zeichneBlatt(t) {
   ctx.font = `${Math.round(W * .03)}px "Courier New", monospace`;
   ctx.fillStyle = '#7a7268';
   try { ctx.letterSpacing = '1px'; } catch (e) { /* 旧浏览器忽略 */ }
-  ctx.fillText(`${tx.datum} · ${tx.ausgabe} · 本报通讯员 手绘`, P + W / 2, Q + p + W * .105);
+  ctx.fillText(`${tx.datum} · ${tx.ausgabe} · 本报通讯员 手绘`, P + W / 2, Q + p + W * .105, W - 2 * p);   // 第四参兜底：最坏种子+320 屏不溢出版心
   ctx.restore();
   // 报头下的双细线
   s.zug([{ x: P + p, y: Q + p + W * .14 }, { x: P + W - p, y: Q + p + W * .14 }], { spur: 'linie-a', w: 1.3, deckung: .8, eckig: true });
@@ -363,7 +363,7 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .13);
   falte(s, P, W, Q + H * .58);
-  stempel(tx, W, P + W - p - W * .077, Q + p + W * .21);
+  stempel(tx, W, P + W - p - W * .077, Q + p + W * .225);   // .225：章顶避开报头双细线第二根（.21 在窄屏笔宽占比大时会蹭线）
 }
 
 /* —— 版式二 · 头版：通栏大标题 + 并排两帧小肖像（第二张脸 saat+1013） —— */
@@ -483,12 +483,14 @@ function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .115);
   falte(s, P, W, Q + H * .44);   // 折痕压在小肖像胸口带（框高 73% 处，避开框底虚线）
-  stempel(tx, W, P + W - p - W * .077, Q + p + W * .21, tx.verlorenStempel);
+  stempel(tx, W, P + W - p - W * .077, Q + p + W * .225, tx.verlorenStempel);   // 同 sucht：.225 避双细线
 }
 
 /* ================= 主循环与按钮 ================= */
 
 let vorige = 0;
+let wechselZeit = -9;   // 上次「换一张」的时刻：新剪报 0.3s 从 94% 落定（纸是物，幅度比人小）；
+                        // 别叫 wechselT——app.js 顶层已占用，classic script 共享词法域重名即整页炸
 function rahmen(now) {
   const t = now / 1000;
   const dt = vorige ? Math.min(t - vorige, .05) : .016;
@@ -498,7 +500,17 @@ function rahmen(now) {
   kopf.update(dt, t, pointer);
   kopf2.update(dt, t, TOTER_ZEIGER);
   papier();
+  const wE = Math.min(1, Math.max(0, (t - wechselZeit) / .3));
+  if (wE >= 1) { zeichneBlatt(t); requestAnimationFrame(rahmen); return; }
+  const wk = .94 + .06 * wE + .05 * Math.sin(Math.PI * wE);   // wE=0→.94，中途≈1.02 过冲，wE=1→恰 1
+  const g = blattGeometrie();
+  const mx = g.x + g.w / 2, my = g.y + g.h / 2;   // 锚纸中心：整张纸一起落，页底纸纹不动
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.scale(wk, wk);
+  ctx.translate(-mx, -my);
   zeichneBlatt(t);
+  ctx.restore();
   requestAnimationFrame(rahmen);
 }
 
@@ -516,6 +528,7 @@ requestAnimationFrame(rahmen);
 document.getElementById('neues').addEventListener('click', () => {
   kopf = neuesKopf((Math.random() * 1e9) | 0);
   kopf2 = zweitKopf(saat + 1013);   // 头版第二张脸跟着换，别让脸和文案对不上
+  wechselZeit = performance.now() / 1000;   // 新纸落定的起点（与 rAF 时间戳同源）
   try { history.replaceState(null, '', '?seed=' + saat); } catch (e) { /* file:// 可能拒绝 */ }
 });
 
