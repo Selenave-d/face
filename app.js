@@ -2987,20 +2987,27 @@ function layout() {
       const head = heads[vergroessert];
       headCache(head);
       const bedarf = raumBedarf(head);
-      head.mass = Math.min(innerWidth / (2 * bedarf.seite * 1.2), innerHeight / (bedarf.oben + 2.4));
+      // 手机端导航是标题下的一整行横排：放大头的头顶至少要压过它；
+      // 让位从可用高度里扣掉再算 mass——矮窗里名字才不出画布；下限 1 防极矮视口负 mass
+      //（比标题带还矮的窗口没有布局可谈，头缩到近零即可，不虚构空间）
+      const kopfRand = Math.max(innerHeight * .1, innerWidth < 720 ? 104 : 80);
+      head.mass = Math.min(innerWidth / (2 * bedarf.seite * 1.2), Math.max(1, innerHeight - kopfRand) / (bedarf.oben + 2.4));
       head.cx = innerWidth / 2;
-      // 手机端导航是标题下的一整行横排：放大头的头顶至少要压过它
-      head.cy = Math.max(innerHeight * .1, innerWidth < 720 ? 104 : 80) + bedarf.oben * head.mass;
+      head.cy = kopfRand + bedarf.oben * head.mass;
       head.nameY = head.cy + head.mass * 1.62;
       return;
     }
-    // 一墙脸：大而稀的网格，每格一颗头，名字在头下
+    // 一墙脸：大而稀的网格，每格一颗头，名字在头下；
+    // 标题/导航带先从可用高度里扣掉再算格子——否则首行整体下移，
+    // 名字会压到第二行头顶（800×600、1920×1080 可复现），矮横屏直接出画布
     const cols = Math.max(2, Math.min(4, Math.round(innerWidth / 360)));
     const rows = Math.max(1, Math.min(3, Math.round(innerHeight / 400)));
     const count = cols * rows;
     while (heads.length < count) heads.push(new Head(baseSeed + heads.length));
     heads.length = count;
-    const gw = innerWidth / cols, gh = innerHeight / rows;
+    const gw = innerWidth / cols;
+    const kopfBand = innerWidth < 720 ? 104 : 88;   // 标题带（桌面：标题底 66；手机：导航行底约 89）
+    const gh = Math.max(1, innerHeight - kopfBand) / rows;   // 下限 1 防极矮视口负高度，不虚构空间
     for (let i = 0; i < count; i++) {
       const head = heads[i];
       headCache(head);   // 确保 afro/帽子参数可用于占位计算
@@ -3008,9 +3015,7 @@ function layout() {
       const bedarf = raumBedarf(head);
       head.mass = Math.min(gw / (2 * bedarf.seite * 1.06), gh / (bedarf.oben + 2.1));
       head.cx = gw * (c + .5);
-      // 首行头顶让开标题/导航带（桌面：标题底 66；手机：导航行底约 89）
-      const himmel = r === 0 ? (innerWidth < 720 ? 104 : 88) : gh * .08;
-      head.cy = gh * r + head.mass * bedarf.oben + himmel;
+      head.cy = kopfBand + gh * r + head.mass * bedarf.oben + (r === 0 ? 0 : gh * .08);
       head.nameY = head.cy + head.mass * 1.62;
     }
     return;
