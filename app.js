@@ -981,8 +981,9 @@ function bogen(P, cx, cy, r, a0, a1, anz = 12) {
 /* 脸颊弧（wangenbogen）：ring 类大眼睛被脸颊弧线裁掉下半 */
 const WANGEN_AUGEN = { ring: { r: .56, sanft: 1 }, weit: { r: .74, sanft: 1 }, offen: { r: .7, sanft: .62 }, stern: { r: .7, sanft: 1 }, knopf: { r: .5, sanft: 1 } };
 
-function drawEyeMitWange(ctx, stift, feld, size, kind, seite, wange, outline, lider, pal, spur, drawEyeFn) {
-  const form = WANGEN_AUGEN[kind];
+function drawEyeMitWange(ctx, stift, feld, size, kind, seite, wange, outline, lider, pal, spur, drawEyeFn, formKind) {
+  // 弧线是脸的固有特征：参数跟 DNA 眼型（formKind）走，不跟表情眼型走
+  const form = WANGEN_AUGEN[formKind ?? kind];
   if (!form || lider > .72) { drawEyeFn(); return; }
   const r = form.r;
   const P = (e, n) => feld.to(e * size, -n * size);
@@ -1009,17 +1010,23 @@ function drawEyeMitWange(ctx, stift, feld, size, kind, seite, wange, outline, li
     if (b.every(drin)) { gefunden = b; break; }
   }
   if (!gefunden) { drawEyeFn(); return; }
-  // 弧以下裁掉，眼睛像是从脸颊后面探出来
-  ctx.save();
-  ctx.beginPath();
-  const clip = stiftResample(gefunden, false, true)
-    .concat([P(bx - size * (rad + 1), 3), P(bx + size * (rad + 1), 3)]);
-  ctx.moveTo(clip[0].x, clip[0].y);
-  for (const p of clip.slice(1)) ctx.lineTo(p.x, p.y);
-  ctx.closePath();
-  ctx.clip();
-  drawEyeFn();
-  ctx.restore();
+  if (!WANGEN_AUGEN[kind]) {
+    // 表情眼（froh 弯月/schlaefrig 下垂）整体落在弧线的裁剪侧：只描弧、不裁眼——
+    // 弧不再随表情消失，弯月眼也不被脸颊吃掉
+    drawEyeFn();
+  } else {
+    // 弧以下裁掉，眼睛像是从脸颊后面探出来
+    ctx.save();
+    ctx.beginPath();
+    const clip = stiftResample(gefunden, false, true)
+      .concat([P(bx - size * (rad + 1), 3), P(bx + size * (rad + 1), 3)]);
+    ctx.moveTo(clip[0].x, clip[0].y);
+    for (const p of clip.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.closePath();
+    ctx.clip();
+    drawEyeFn();
+    ctx.restore();
+  }
   stift.zug(gefunden, {
     spur, w: LID_BREITE * wange.dicke * form.sanft, wackel: .004, farbe: pal.tinte,
     spitz: .85, deckung: .9 * (.4 + .6 * form.sanft) * (1 - lider / .72), einlagig: form.sanft < 1,
@@ -2082,7 +2089,10 @@ function hutGeo(dna, ctx3d) {
     bx = Math.max(bx, Math.abs(p.x)); bz = Math.max(bz, Math.abs(p.z));
   }
   const y0 = schaedelPunkt(0, sitzV, k).y;
-  const kuppe = k.ry + (HOHE_FRISUREN.has(dna.merkmale.haar) ? .05 : 0);
+  // 帽冠要罩过最长的刺/呆毛：igel 刺尖≈ry+壳.035+刺.152；antenne 尖≈ry*1.15+球头.036
+  const frisur = dna.merkmale.haar;
+  const kuppe = k.ry + (HOHE_FRISUREN.has(frisur) ? .05 : 0)
+    + (frisur === 'igel' ? .09 : 0) + (frisur === 'antenne' ? .16 * k.ry : 0);
   bx = bx * 1.1 + .03; bz = bz * 1.1 + .03;
   const l = bx * f.verjuengung, lz = bz * f.verjuengung;
   const hoch = Math.max(k.ry * f.hoch, kuppe + .05 - y0);
@@ -2847,7 +2857,7 @@ function drawHead(ctx, head, t) {
     const size = groessen.auge * dna.augenJitter[seite < 0 ? 0 : 1];
     const zeichnen = () => drawEye(stift, feld, size, (anim.gesicht && anim.gesicht.auge) || mk.auge, seite, anim, dna.pupille, pal, `auge${seite}`, cache.stern);
     if (wangenAktiv && (cache.wange.beide || seite === dna.seite)) {
-      drawEyeMitWange(ctx, stift, feld, size, (anim.gesicht && anim.gesicht.auge) || mk.auge, seite, cache.wange, umriss, z.lider, pal, `wange${seite}`, zeichnen);
+      drawEyeMitWange(ctx, stift, feld, size, (anim.gesicht && anim.gesicht.auge) || mk.auge, seite, cache.wange, umriss, z.lider, pal, `wange${seite}`, zeichnen, mk.auge);
     } else zeichnen();
     const braueFeld = feldAn(u, dna.layout.braueV, ctx3d);
     drawBrow(stift, braueFeld, size * 1.2, (anim.gesicht && anim.gesicht.braue) || mk.braue, seite, z.wach, pal, `braue${seite}`);
@@ -2952,6 +2962,15 @@ function papier() {
 }
 
 // 每颗头需要的空间（世界单位）：帽子和爆炸头要更高更宽
+// 胸像肩底（世界单位，头心以下）：drawNeck 的 untenY≈|schaedelPunkt(0,-1.22).y|+.24ry
+//（恒大于 tiefste+.08ry），加肩块 .2ry/中点下沉 .05 与围巾流苏 .21ry 的较深者，.04 姿态余量——
+// 名字与命中区都按它走，高颅骨（ry≥1.03）的名字不再压围巾流苏/肩底
+function bustenBoden(dna) {
+  const ry = dna.kopf.ry;
+  const untenY = Math.abs(schaedelPunkt(0, -1.22, dna.kopf).y) + .24 * ry + .04;
+  return untenY + Math.max(.21 * ry, .2 * ry + .05);
+}
+
 function raumBedarf(head) {
   const dna = head.dna;
   let oben = 1.3, seite = 1.3;
@@ -2971,7 +2990,7 @@ function raumBedarf(head) {
   if (dna.merkmale.haar === 'dutt' && head.cache?.dutt) {
     oben = Math.max(oben, (dna.kopf.ry + .1 + head.cache.dutt.r * 1.9) * 1.04);
   }
-  return { oben, seite };
+  return { oben, seite, unten: bustenBoden(dna) };
 }
 
 function layout() {
@@ -2994,7 +3013,7 @@ function layout() {
       head.mass = Math.min(innerWidth / (2 * bedarf.seite * 1.2), Math.max(1, innerHeight - kopfRand) / (bedarf.oben + 2.4));
       head.cx = innerWidth / 2;
       head.cy = kopfRand + bedarf.oben * head.mass;
-      head.nameY = head.cy + head.mass * 1.62;
+      head.nameY = head.cy + head.mass * Math.max(1.62, bedarf.unten + .1);   // 高颅骨按实际肩底再往下让
       return;
     }
     // 一墙脸：大而稀的网格，每格一颗头，名字在头下；
@@ -3016,7 +3035,7 @@ function layout() {
       head.mass = Math.min(gw / (2 * bedarf.seite * 1.06), gh / (bedarf.oben + 2.1));
       head.cx = gw * (c + .5);
       head.cy = kopfBand + gh * r + head.mass * bedarf.oben + (r === 0 ? 0 : gh * .08);
-      head.nameY = head.cy + head.mass * 1.62;
+      head.nameY = head.cy + head.mass * Math.max(1.62, bedarf.unten + .1);   // 高颅骨按实际肩底再往下让
     }
     return;
   }
@@ -3159,12 +3178,13 @@ function bodenZeichnen(t, head) {
   }
 }
 
-// 命中测试：帽檐宽、afro 高也算"这颗头"——量的是未缩放的本地坐标。
+// 命中测试：帽檐宽、afro 高也算"这颗头"——量的是未缩放的本地坐标；
+// 下沿按实际肩底（b.unten）放宽——高颅骨胸像画到 1.5~1.67，固定 1.35 会让点肩块没反应。
 // 模块级（frame 也要用，不能藏在事件注册块的作用域里）
 const trifftKopf = (h, x, y) => {
   const b = raumBedarf(h);
   const dx = (x - h.cx) / h.mass, dy = (y - h.cy) / h.mass;
-  return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < 1.35 && dy > -b.oben * 1.05;
+  return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < Math.max(1.35, b.unten + .05) && dy > -b.oben * 1.05;
 };
 
 // 命中前先把指针按"画出去的缩放"反算回本地（锚与 frame 的 transform 完全一致：脚边 nameY），
