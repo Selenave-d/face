@@ -23,9 +23,10 @@ let kopf = neuesKopf(saat);
 
 let uiStift = null, uiTick = -1;
 
-// 方形舞台：居中偏上，避开顶部标题（手机端导航更高，多让）、动作行与底部按钮
+// 方形舞台：居中偏上，避开顶部标题（手机端导航更高，多让）、动作行与底部按钮；
+// 手机端手势按钮折两行更高，底边预算 216→266——横屏/矮窗不再压到按钮
 function buehne() {
-  const s = Math.max(120, Math.min(innerWidth - 32, innerHeight - 216));
+  const s = Math.max(120, Math.min(innerWidth - 32, innerHeight - (innerWidth < 720 ? 266 : 216)));
   const yMin = innerWidth < 720 ? 150 : 78;
   return { s, x: (innerWidth - s) / 2, y: Math.max(yMin, (innerHeight - 62 - s) / 2) };
 }
