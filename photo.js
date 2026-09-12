@@ -332,7 +332,7 @@ let draftZaehler = 0;
 const abzuege = [];           // { recs: [...5], titel }
 
 /* 墨渍：墨水介质的孩子离场时，在站过的架子上留一片渐渐变淡的墨渍（墙上的记忆） */
-const mauernFlecken = [];     // { x, y, seed, von }
+const mauernFlecken = [];     // { fx, reihe, seed, von }——存槽位分数与行号，绘制时按当前窗口重投影（架子线随 resize 变，墨渍钉在架上不悬空）
 
 function machRequisit() {
   const r = strom((klassenSeed * 7 + ++draftZaehler * 7919) | 0, 'requisit');
@@ -381,6 +381,9 @@ knipsBtn.addEventListener('click', () => knips(performance.now() / 1000));
 
 // 换一班：全新十个孩子，总分与道具保留，状态机回 idle，架上陈设跟着换
 function neueKlasse() {
+  // 拍照后 1.1s 跳跃途中换班：卡还没生成就被清状态，奖励会丢——先把卡生成出来再收
+  if (phase === 'sprung') draftStart(performance.now() / 1000);
+  draftPick(0, performance.now() / 1000);   // 二选一没点就换班/换过滤器：自动收左卡（非 draft 态/已点过自守卫挡下）
   gewaehlt.clear();
   knipsBtn.disabled = true;
   phase = 'idle';
@@ -388,7 +391,17 @@ function neueKlasse() {
   draft = null;
   dekoSaat = Math.floor(Math.random() * 1e9);
   kinder.length = 0;
-  for (let p = 0; p < KINDER_PRO_REIHE * 2; p++) kinder.push(neuesKind(p));
+  const t = performance.now() / 1000;
+  for (let p = 0; p < KINDER_PRO_REIHE * 2; p++) {
+    // 全员从两侧走进来（复用 rein 的入场字段；rahmen 的 kommt 动画不吃 phase）
+    const kind = neuesKind(p);
+    kind.zustand = 'kommen';
+    kind.seit = t;
+    kind.face = 'angst';
+    kind.ox0 = (p % KINDER_PRO_REIHE < 2.5 ? -1 : 1) * innerWidth * .3;
+    kind.ox = kind.ox0;
+    kinder.push(kind);
+  }
 }
 document.getElementById('klasse').addEventListener('click', neueKlasse);
 
@@ -407,7 +420,9 @@ function phaseTick(t) {
       const kind = kinder[i];
       kind.zustand = 'geht'; kind.seit = t; kind.face = 'weint';
       if (kind.rec.media === 'ink' || kind.rec.media === 'marker') {   // 墨水渗墨渍、马克笔蹭出划痕
-        mauernFlecken.push({ x: kind.x, y: kind.footY - kind.k * .15, seed: kind.rec.seed, von: t,
+        // 存槽位分数 + 行号（clip.js 锈斑同款）：resize 后按架子线重投影，不再悬空/入地
+        mauernFlecken.push({ fx: (kind.platz % KINDER_PRO_REIHE + .5) / KINDER_PRO_REIHE,
+          reihe: Math.floor(kind.platz / KINDER_PRO_REIHE), seed: kind.rec.seed, von: t,
           media: kind.rec.media, farbe: kind.rec.farbe });
         if (mauernFlecken.length > 8) mauernFlecken.shift();
       }
@@ -757,6 +772,10 @@ function zeichneMauernFlecken(t) {
     const f = mauernFlecken[i];
     const alter = t - f.von;
     if (alter > 24) { mauernFlecken.splice(i, 1); continue; }
+    // 重投影：形状随种子定死（干了的墨不重掷），只有锚点跟着架子线走
+    const g = platzGeometrie(f.reihe * KINDER_PRO_REIHE);
+    f.x = innerWidth * f.fx;
+    f.y = g.fussY - Math.min(innerHeight * (f.reihe === 0 ? .115 : .15), innerWidth / 5.6) * .15;
     const alpha = .26 * (1 - alter / 24);
     if (f.media === 'marker') {
       const rgb = WASH_POOL[Math.min(WASH_POOL.length - 1, Math.floor((f.farbe ?? .5) * WASH_POOL.length))];
