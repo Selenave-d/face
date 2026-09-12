@@ -108,14 +108,15 @@ function platzeLegen() {
     .forEach((e, rang) => { plaetze[e.i].rang = rang; });
 
   // 报得上名字的前 12 人：名字带离得太近的往下错一行（名字画在人群之上，见 rahmen）
+  // 逐级试 17/34/51 直到与所有已放好的名字都错开——只抬一档时三连撞会让两名字落回同一档
   const gesetzt = [];
   for (const p of plaetze.filter((q) => q.rang <= 12).sort((a, b) => a.bodenY - b.bodenY)) {
     p.nameHub = 0;
-    for (const b of gesetzt) {
-      if (Math.abs(p.x - b.x) < 64 && Math.abs((p.bodenY + p.mass * .3) - (b.bodenY + b.mass * .3 + b.nameHub)) < 17) {
-        p.nameHub = 17;
-        break;
-      }
+    const py = p.bodenY + p.mass * .3;
+    for (let hub = 0; hub <= 51; hub += 17) {
+      p.nameHub = hub;
+      if (!gesetzt.some((b) => Math.abs(p.x - b.x) < 64
+        && Math.abs(py + hub - (b.bodenY + b.mass * .3 + b.nameHub)) < 17)) break;
     }
     gesetzt.push(p);
   }
@@ -202,6 +203,22 @@ andereEl?.addEventListener('click', () => {
   saat = Math.floor(Math.random() * 1e9);
   leute = [];
   platzeLegen();
+});
+
+// 点人群里的人逗他挥手：站满的人里挑椭圆命中最近的一个，一次挥手（2.2s）后自动回站立；
+// 精灵 key 含 akName，换动作自动触发该人重画（庆祝期间由 feierTick 接管，无需特判）
+canvas.addEventListener('click', (e) => {
+  const sicht = sichtbarAus(wert);
+  let best = -1, bestD = 1e9;
+  for (let i = 0; i < plaetze.length; i++) {
+    const p = plaetze[i], h = leute[i];
+    if (clamp(sicht - p.rang, 0, 1) < 1) continue;   // 还没站稳的不逗
+    const dx = (e.clientX - p.x) / (p.mass * 1.8);   // 椭圆半宽：肩宽加一点余量
+    const dy = (e.clientY - (p.bodenY - fussWelt(h) * p.mass * .5)) / (fussWelt(h) * p.mass * .6);
+    const d = Math.hypot(dx, dy);
+    if (d < 1 && d < bestD) { bestD = d; best = i; }
+  }
+  if (best >= 0) leute[best].setAktion('wave', performance.now() / 1000, AKTIONEN.wave.periode);
 });
 
 function schieberZeichnen(t) {
