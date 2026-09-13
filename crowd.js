@@ -52,6 +52,11 @@ function platzeLegen() {
   for (const h of leute) spanntMax = Math.max(spanntMax, raumBedarf(h).oben + fussWelt(h) + .4);
   const sumF = REIHEN_FAKTOR.slice(1).reduce((a, b) => a + b, 0);
   mass0 = Math.max(3, Math.min(mass0, (bodenVorn - TITEL_RAUM) / (.48 * sumF + spanntMax * REIHEN_FAKTOR[0])));
+  // 量化约 2%：步长取 2 的幂（网格锚在绝对刻度上），同档窗口尺寸算出同一 mass0，
+  // resize 不再全员重画精灵。向下取整——量化只会更小，不会重新突破标题/横向硬上限；
+  // 步长不能取 mass0*.02 本身——round(x/x)=x 恒等，等于没量化
+  const stufe = Math.max(.2, Math.pow(2, Math.round(Math.log2(mass0 * .02))));
+  mass0 = Math.floor(mass0 / stufe) * stufe;
 
   /* name-me 式自由站位：深度仍按六档出发（各档人数/个头比例照旧），但位置
    * 由"中心偏置 + 碰撞拒绝"采样散开——远看是一群人围着，不再是整齐的六排。
@@ -380,9 +385,15 @@ function raketenZeichnen(t) {
 function kopfSprite(h, p, t, namenAn) {
   const qt = Math.floor(t * 12) / 12;
   const schnell = (h.plappertBis > t || h.akVon || h.blinzeltBis > qt) ? 2 : 1;
-  const key = `${Math.floor(t * 12 * schnell)}|${h.akName}|${namenAn ? 1 : 0}|${Math.round(p.mass * 10)}`;
+  // 每人固定随机相位（<1/12s）：48 人的换帧时刻摊进整帧，不再是同一帧全员重画
+  if (h.spritePhase === undefined) h.spritePhase = strom(h.dna.seed, 'spritePhase').n() / 12;
+  const key = `${Math.floor((t + h.spritePhase) * 12 * schnell)}|${h.akName}|${namenAn ? 1 : 0}|${Math.round(p.mass * 10)}`;
   let sp = h.sprite;
-  if (sp && sp.key === key) return sp;
+  if (sp && sp.key === key) {
+    // 命中也要钉锚点：mass0 量化后 resize 常不触发重画，但 h.cy 跟窗口高变了
+    sp.topY = h.cy - (raumBedarf(h).oben + .95) * p.mass;
+    return sp;
+  }
   const sdpr = Math.min(dpr, p.reihe < 3 ? 1.25 : 1.75);   // 后排小精灵省显存
   const oben = raumBedarf(h).oben;
   const W = p.mass * 4.4;                    // 横向最远：挥手 ±2.4 / 帽檐 ±2.1，取保守值
@@ -422,7 +433,7 @@ function rahmen(now) {
     if (f >= 1) { wert = schnappBis; schnappT = -1; }
   }
 
-  papier();
+  papierSchnell();
   feierTick(t);
 
   // 地面线：比最前排的脚再低几像素，画在人群后面，身体自然盖住脚后的线

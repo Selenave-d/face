@@ -2944,21 +2944,46 @@ function makeGrain() {
   grainPattern = ctx.createPattern(g, 'repeat');
 }
 
-function papier() {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = PAPIER;
-  ctx.fillRect(0, 0, innerWidth, innerHeight);
+// 纸面三遍全屏 fill 的公共画法：接受任意 ctx（papier 与 papierSchnell 共用，防两处漂移）
+function papierAuf(c, w, h) {
+  c.fillStyle = PAPIER;
+  c.fillRect(0, 0, w, h);
   // 角落微微变暗的印刷 vignette
-  const diag = Math.hypot(innerWidth, innerHeight) * .62;
-  const grad = ctx.createRadialGradient(innerWidth * .5, innerHeight * .42, diag * .15, innerWidth * .5, innerHeight * .42, diag);
+  const diag = Math.hypot(w, h) * .62;
+  const grad = c.createRadialGradient(w * .5, h * .42, diag * .15, w * .5, h * .42, diag);
   grad.addColorStop(0, 'rgba(0,0,0,0)');
   grad.addColorStop(1, 'rgba(70,55,30,0.045)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  c.fillStyle = grad;
+  c.fillRect(0, 0, w, h);
   if (grainPattern) {
-    ctx.fillStyle = grainPattern;
-    ctx.fillRect(0, 0, innerWidth, innerHeight);
+    c.fillStyle = grainPattern;
+    c.fillRect(0, 0, w, h);
   }
+}
+
+function papier() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  papierAuf(ctx, innerWidth, innerHeight);
+}
+
+/* 先画再拓：photo/crowd 每帧整屏铺纸是 2~10ms 的大头，离屏画一次记住逐帧贴回；
+ * 尺寸/dpr 变了才重画。贴回后恢复 dpr 变换——后续绘制仍按 CSS 像素坐标走。 */
+let papierMemo = null;
+function papierSchnell() {
+  const w = Math.ceil(innerWidth), h = Math.ceil(innerHeight);
+  if (!papierMemo || papierMemo.w !== w || papierMemo.h !== h || papierMemo.dpr !== dpr) {
+    const cv = papierMemo ? papierMemo.cv : document.createElement('canvas');
+    cv.width = Math.max(1, Math.floor(w * dpr));
+    cv.height = Math.max(1, Math.floor(h * dpr));
+    const mc = cv.getContext('2d');
+    mc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    papierAuf(mc, w, h);
+    papierMemo = { cv, w, h, dpr };
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(papierMemo.cv, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 // 每颗头需要的空间（世界单位）：帽子和爆炸头要更高更宽

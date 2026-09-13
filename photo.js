@@ -811,57 +811,81 @@ function zeichneMauernFlecken(t) {
 }
 
 // 冲洗合影：右下角的贴纸照片堆（最新的在最上，旧的垫底偏移淡出）
+// 卡面主体画进任意 ctx（离屏 memo 用）；边线 label 掺照片自己的种子（稳定、不随出栈变），
+// 同帧各张照片的抖动各不相同，又不会因栈顶推移而重掷
+function abZeichnen(c, st, ab, w, band, h, qt, mob) {
+  const nr = ab.recs[0].seed % 49;
+  // 照片纸：暖白 + 四边手绘细线
+  c.fillStyle = 'rgba(251,248,241,.96)';
+  c.fillRect(0, 0, w, h - band + 4);
+  st.line([[8, 0], [w - 8, 0]], 1, { label: 340 + nr, alpha: .5 });
+  st.line([[8, h - band + 4], [w - 8, h - band + 4]], 1, { label: 341 + nr, alpha: .5 });
+  st.line([[0, 8], [0, h - band - 4]], 1, { label: 342 + nr, alpha: .5 });
+  st.line([[w, 8], [w, h - band - 4]], 1, { label: 343 + nr, alpha: .5 });
+  // 五人小合影：一排站着，还在轻轻呼吸；微型尺寸走扁平上色
+  const kK = (w - 20) / 5 * .78;
+  const fussY = h - band - 6;
+  ab.recs.forEach((rec, i) => {
+    drawDoodle(c, rec, 12 + (w - 24) * (i + .5) / 5, fussY, kK, qt, { face: 'froh', flach: true });
+  });
+  // 底边白带上手写牌型
+  c.font = `${mob ? 9 : 10}px "Kaiti", "STKaiti", "楷体", serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillStyle = '#8b8894';
+  c.fillText(ab.titel, w / 2, h - band / 2 + 1);
+  // 白带右端手写日期角标：拍立得在相纸边写日期的惯例
+  c.save();
+  c.translate(w - 16, h - band / 2 + 1);
+  c.rotate(-.06);
+  c.font = `${mob ? 7 : 8}px "Kaiti", "STKaiti", "楷体", serif`;
+  c.fillStyle = '#a89f93';
+  c.textAlign = 'right';
+  c.fillText(ab.datum, 0, 0);
+  c.restore();
+  // 顶角两片胶带
+  c.fillStyle = 'rgba(214,203,182,.55)';
+  c.save();
+  c.translate(12, 2); c.rotate(-.35); c.fillRect(-10, -5, 26, 11);
+  c.restore();
+  c.save();
+  c.translate(w - 12, 2); c.rotate(.35); c.fillRect(-16, -5, 26, 11);
+  c.restore();
+}
+
 function zeichneAbzuege(t) {
   const n = abzuege.length;
   if (!n) return;
-  const st = requisitStift(t);
   const mob = innerWidth < 720;
   const w = mob ? 150 : 178, band = mob ? 22 : 28, h = w * .72 + band;
+  // 内容只随 8fps 笔抖与 12fps 呼吸变（drawDoodle 内部同款量化）：烘进离屏逐帧贴回，
+  // 两个刻度的边界并集约 16 次/s（原 60 次/s 全量重绘）
+  const qt = Math.floor(t * 12) / 12;
+  const tick8 = Math.floor(t * 8);
+  const pad = 8;   // 装订边：胶带上探到负 y、边线抖动会出卡面，离屏画布得留余量
+  const pw = Math.max(1, Math.round((w + pad * 2) * dpr)), ph = Math.max(1, Math.round((h + pad * 2) * dpr));
   abzuege.forEach((ab, idx) => {
     const rang = n - 1 - idx;   // 0 = 最新最上；旧的往左下垫，不出屏
     const x = innerWidth - w - (mob ? 10 : 26) - rang * 9;
     const y = (mob ? innerHeight - h - 168 : innerHeight - h - 60) + rang * 9;
+    const key = `${tick8}|${qt}|${pw}x${ph}`;   // 尺寸项兼收 dpr 与 720 断点换卡宽
+    let m = ab.memo;
+    if (!m || m.key !== key) {
+      if (!m) m = ab.memo = { cv: document.createElement('canvas'), key: '' };
+      m.key = key;
+      if (m.cv.width !== pw || m.cv.height !== ph) { m.cv.width = pw; m.cv.height = ph; }
+      const cc = m.cv.getContext('2d');
+      cc.setTransform(1, 0, 0, 1, 0, 0);
+      cc.clearRect(0, 0, m.cv.width, m.cv.height);
+      cc.setTransform(dpr, 0, 0, dpr, pad * dpr, pad * dpr);
+      abZeichnen(cc, bleiStift(cc, tick8, 'graphite', .5), ab, w, band, h, qt, mob);
+    }
     ctx.save();
     if (rang) ctx.globalAlpha = .55;
     ctx.translate(x + w / 2, y + h / 2);
     ctx.rotate((idx % 2 ? -1 : 1) * (.025 + rang * .01));
     ctx.translate(-w / 2, -h / 2);
-    // 照片纸：暖白 + 四边手绘细线
-    ctx.fillStyle = 'rgba(251,248,241,.96)';
-    ctx.fillRect(0, 0, w, h - band + 4);
-    st.line([[8, 0], [w - 8, 0]], 1, { label: 340 + idx * 7, alpha: .5 });
-    st.line([[8, h - band + 4], [w - 8, h - band + 4]], 1, { label: 341 + idx * 7, alpha: .5 });
-    st.line([[0, 8], [0, h - band - 4]], 1, { label: 342 + idx * 7, alpha: .5 });
-    st.line([[w, 8], [w, h - band - 4]], 1, { label: 343 + idx * 7, alpha: .5 });
-    // 五人小合影：一排站着，还在轻轻呼吸；微型尺寸走扁平上色
-    const kK = (w - 20) / 5 * .78;
-    const fussY = h - band - 6;
-    ab.recs.forEach((rec, i) => {
-      drawDoodle(ctx, rec, 12 + (w - 24) * (i + .5) / 5, fussY, kK, t, { face: 'froh', flach: true });
-    });
-    // 底边白带上手写牌型
-    ctx.font = `${mob ? 9 : 10}px "Kaiti", "STKaiti", "楷体", serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#8b8894';
-    ctx.fillText(ab.titel, w / 2, h - band / 2 + 1);
-    // 白带右端手写日期角标：拍立得在相纸边写日期的惯例
-    ctx.save();
-    ctx.translate(w - 16, h - band / 2 + 1);
-    ctx.rotate(-.06);
-    ctx.font = `${mob ? 7 : 8}px "Kaiti", "STKaiti", "楷体", serif`;
-    ctx.fillStyle = '#a89f93';
-    ctx.textAlign = 'right';
-    ctx.fillText(ab.datum, 0, 0);
-    ctx.restore();
-    // 顶角两片胶带
-    ctx.fillStyle = 'rgba(214,203,182,.55)';
-    ctx.save();
-    ctx.translate(12, 2); ctx.rotate(-.35); ctx.fillRect(-10, -5, 26, 11);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(w - 12, 2); ctx.rotate(.35); ctx.fillRect(-16, -5, 26, 11);
-    ctx.restore();
+    ctx.drawImage(ab.memo.cv, -pad, -pad, w + pad * 2, h + pad * 2);
     ctx.restore();
   });
 }
@@ -928,7 +952,7 @@ function rahmen(now) {
     platzieren(kind);
   }
 
-  papier();
+  papierSchnell();
   regale(t);
   zeichneRegalDeko(t);   // 架上陈设：站在空档里当布景，画在孩子之前形成层次
   zeichneMauernFlecken(t);   // 墨渍在墙上：贴纸之前、孩子们最后
