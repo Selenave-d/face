@@ -313,7 +313,7 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     const cos = Math.cos(winkel), sin = Math.sin(winkel);
     const diag = Math.hypot(x1 - x0, y1 - y0);
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    const luecke = gap * (M.luecke ?? 1);
+    const luecke = Math.max(gap * (M.luecke ?? 1), 2.2);   // 下限 2.2px：k≤135 时原式是亚像素，排线叠成实心还白费 4-5 倍 stroke
     for (let d = -diag / 2; d < diag / 2; d += luecke) {
       const r = jr(label, Math.round(d * 13));
       const j1 = (r() - .5) * gap, j2 = (r() - .5) * gap;
@@ -355,7 +355,10 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     const dunkel = !!opt.dunkel;
     if (flachModus) {
       ctx.save(); poly(pts);
-      ctx.fillStyle = `rgba(${M.farbe},${dunkel ? .5 : .18})`;
+      // 贴纸照片里也认得出介质：水彩/马克的发盖耳朵带各自淡彩（灰介质保持原样）
+      ctx.fillStyle = istWash
+        ? `rgba(${dunkel ? '120,105,100' : washRGB.join(',')},${dunkel ? (M.dunkelWash ?? .45) : (M.wash ?? .3)})`
+        : `rgba(${M.farbe},${dunkel ? .5 : .18})`;
       ctx.fill(); ctx.restore();
       return;
     }
@@ -381,7 +384,7 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     const wk = opt.winkel ?? -.9;
     if (dunkel) {
       if (istWash) {
-        wash(pts, [125, 110, 105], .4, 11);
+        wash(pts, [125, 110, 105], M.dunkelWash ?? .45, 11);   // 介质各自的深色覆盖度（marker .85 的"平涂高覆盖"此前从未生效）
         hatch(pts, .07 * (opt.k ?? 10) / 10, wk, .35, 12);   // 深色角色：淡彩 + 局部排线
       } else {
         hatch(pts, .055 * (opt.k ?? 10) / 10, wk, .8, 14);
@@ -466,7 +469,10 @@ function kopfPoly(rec, k) {
 function zeichneBrauen(stift, rec, k, face) {
   if (face !== 'boese' && face !== 'angst') return;
   const ex = .44 * rec.skull.wf * rec.skull.s * .44 * rec.eyes.sx * k;
-  const ey = -.98 * k - .13 * k * rec.eyes.scale;
+  // 发盖下缘（与 zeichneHair 的 yCut 同式）：眉压进刘海时下移到缘下 .04k，不再横在 bob 刘海上
+  const kappe = ['bob', 'bowl', 'long', 'pigtails', 'buns', 'topknot', 'cowlick'].includes(rec.hair.style);
+  const yCut = kappe ? -.95 * k - .44 * rec.skull.s * k * (rec.hair.style === 'bowl' ? .45 : .25) : -1e9;
+  const ey = Math.max(yCut + .04 * k, -.98 * k - .13 * k * rec.eyes.scale);
   for (const s of [-1, 1]) {
     if (face === 'boese') {
       // 外高内低，压向眼睛
@@ -503,8 +509,8 @@ function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
   const sc = s.scale * (face === 'angst' ? 1.2 : 1);
   for (const seite of [-1, 1]) {
     const x = seite * ex;
-    if (blink) {   // 眨眼帧/哭/睡：一条弯线
-      stift.line(bogenPts(x, ey, .09 * k * sc, .07 * k * sc, Math.PI * .15, Math.PI * .85, 6), 1.4, { label: 31 + seite });
+    if (blink) {   // 眨眼帧/哭/睡：一条闭紧的下弯弧（∩，与笑眼同向——睡与哭不再像眯眼笑）
+      stift.line(bogenPts(x, ey, .09 * k * sc, .07 * k * sc, Math.PI * 1.15, Math.PI * 1.85, 6), 1.4, { label: 31 + seite });
       continue;
     }
     switch (typ) {
@@ -664,6 +670,7 @@ function zeichneMuzzle(stift, rec, k, face = 'ruhig') {
   const my = (-.95 + s.muzzleY * .8) * k;
   const rx = s.muzzle * k * .5 * fett;
   const ry = s.muzzle * k * .44 * fett * (rec.art === 'cat' ? .78 : 1);
+  const boden = Math.min(my + ry * 1.12, -.34 * k);   // 瓣底封顶：极端长吻不再吞满胸腔（嘴的落点也按它夹）
   // 吻瓣本体：微坠的卵形（下端略沉，才挂在下巴上）
   const lappen = [];
   const r = _mb(_h2(rec.seed, 17));
@@ -671,7 +678,7 @@ function zeichneMuzzle(stift, rec, k, face = 'ruhig') {
     const a = i / 18 * TAU2;
     const f = 1 + (r() - .5) * .05;
     let x = Math.cos(a) * rx * f, y = Math.sin(a) * ry * f;
-    if (y > 0) y *= 1.12;
+    if (y > 0) y = Math.min(y * 1.12, boden - my);
     lappen.push([x, my + y]);
   }
   if (s.dark) stift.tone(lappen, { dunkel: true, label: 18, k });
@@ -686,7 +693,7 @@ function zeichneMuzzle(stift, rec, k, face = 'ruhig') {
     stift.dot(nx, ny, nr, .92, 83);
   }
   // 嘴在瓣下缘，按表情换
-  const mundY = my + ry * .62;
+  const mundY = Math.min(my + ry * .62, boden - .08 * k);
   if (face === 'froh') {
     stift.line(bogenPts(0, mundY - .02 * k, .11 * k, .08 * k, Math.PI * .1, Math.PI * .9, 8), 1.5, { label: 89 });
   } else if (face === 'weint' || face === 'boese') {
@@ -932,10 +939,12 @@ function zeichneHair(stift, rec, k, kopf) {
 function zeichneSchwanz(stift, rec, k, wag) {
   const t = rec.tail.style;
   if (t === 'none') return;
-  const bx = .3 * k, by = -.32 * k;
+  // 根收进躯干（.3→.2）：三种尾巴都扎在身体上，不再身侧悬空
+  const bx = .2 * k, by = -.32 * k;
   if (t === 'wag') {
-    // 摇尾：从身体侧后向上卷的弧，梢上一点绒
-    const pts = bogenPts(0, 0, .24 * k, .3 * k, Math.PI * .35, Math.PI * 1.5, 9)
+    // 摇尾：髋后向上收的小钩。上界 1.5π 时梢端会穿过脸颊直糊狗鼻——
+    // 收到 .75π，梢藏进身体后侧，摆动全程低于一切吻瓣
+    const pts = bogenPts(0, 0, .24 * k, .3 * k, Math.PI * .35, Math.PI * .75, 9)
       .map((p) => {
         const a = wag * .18;
         return [bx + p[0] * Math.cos(a) - p[1] * Math.sin(a), by - .06 * k + p[0] * Math.sin(a) + p[1] * Math.cos(a)];
@@ -1031,6 +1040,16 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
   }
 }
 
+/* 地面两笔：脚下一长一短的速写弧 + 一根补笔，报纸插图的接地记号。
+ * 站着时垫在脚掌旁，起跳后留在原地——人离地、记号钉地，重量感就有了 */
+function zeichneBoden(stift, k, anim) {
+  if (anim.flach) return;   // 贴纸条 kK≈20-25px 太挤，不画
+  for (const s of [-1, 1]) {
+    stift.line([[s * .08 * k, .014 * k], [s * .2 * k, .004 * k], [s * .27 * k, .016 * k]], 1.1, { label: 177 + s, alpha: .4 });
+    stift.line([[s * .11 * k, .032 * k], [s * .16 * k, .026 * k]], .9, { label: 178 + s, alpha: .3 });
+  }
+}
+
 /* ================= 整只绘制 =================
  * (X, footY) 是脚底位置，k = 像素/单位。anim = { blink, hop(px, 负值向上) }
  */
@@ -1047,7 +1066,9 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   const face = anim.face ?? 'ruhig';
 
   ctx.save();
-  ctx.translate(X, footY + bob + (anim.hop ?? 0));
+  ctx.translate(X, footY);
+  zeichneBoden(stift, k, anim);   // 地面速写：跟脚点不跟跳——起跳时记号留在原地
+  ctx.translate(0, bob + (anim.hop ?? 0));
 
   // 尾巴在身体后面
   zeichneSchwanz(stift, rec, k, wag);
@@ -1057,13 +1078,14 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
     stift.line([[s * .1 * k, -.12 * k], [s * .13 * k, -.01 * k]], 1.4, { label: 170 + s });
     stift.line([[s * .13 * k - (s > 0 ? .01 * k : -.01 * k), -.01 * k], [s * .19 * k, -.01 * k]], 1.4, { label: 172 + s });
   }
-  // 身体：小椭圆（haut 原语决定深色/浅色/介质填法）
-  const koerper = kreisPts(0, -.3 * k, .26 * k, .21 * k, 18, .05, rec.seed + 11);
+  // 身体：小椭圆（haut 原语决定深色/浅色/介质填法）。
+  // 中心 −.3→−.33：小头（s=.9）下巴与领口之间的纸白缝从约 6px 收到被描边吃掉
+  const koerper = kreisPts(0, -.33 * k, .26 * k, .21 * k, 18, .05, rec.seed + 11);
   stift.haut(koerper, torsoDark(rec), { k, winkel: -.55 });   // 身体排线与头错开角度，交叉出铜版画味
   stift.line(koerper, 1.5, { closed: true, label: 13 });
-  // 手臂：细棍下垂
+  // 手臂：细棍下垂（根扎躯干轮廓内：.27/−.4 在椭圆外悬空约 5px，收到 .23/−.36）
   for (const s of [-1, 1]) {
-    stift.line([[s * .27 * k, -.4 * k], [s * .36 * k, -.18 * k]], 1.4, { label: 174 + s });
+    stift.line([[s * .23 * k, -.36 * k], [s * .36 * k, -.18 * k]], 1.4, { label: 174 + s });
     stift.dot(s * .36 * k, -.17 * k, .028 * k, .7, 175 + s);
   }
 
