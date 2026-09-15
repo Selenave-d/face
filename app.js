@@ -2375,7 +2375,9 @@ const AKTIONEN = {
         };
         p.bein[i] = {
           kx: s * (.06 * crouch + .1 * hang), ky: .14 * crouch - .35 * hang + .1 * land,
-          fx: s * (.07 * crouch - .05 * hang), fy: -.95 * hang,
+          // 踝补偿吃掉身体的双份 dy（drawHead 的 translate 与 drawBody 的 Y() 各施加一次）：
+          // 下蹲/落地时脚底恰贴地面，只留中立位那道天然浮空缝
+          fx: s * (.07 * crouch - .05 * hang), fy: -.95 * hang - .4 * crouch - .32 * land,
         };
       }
       return p;
@@ -3038,7 +3040,9 @@ function layout() {
       head.mass = Math.min(innerWidth / (2 * bedarf.seite * 1.2), Math.max(1, innerHeight - kopfRand) / (bedarf.oben + 2.4));
       head.cx = innerWidth / 2;
       head.cy = kopfRand + bedarf.oben * head.mass;
-      head.nameY = head.cy + head.mass * Math.max(1.62, bedarf.unten + .1);   // 高颅骨按实际肩底再往下让
+      // 矮窗封顶：名字别压 #leiste（按钮顶 H-53 + 半字高 + 缝）；只挤名字不缩头——
+      // 分母加大会让普通头所有窗口无谓缩 5%，放大视图要的是头大
+      head.nameY = Math.min(head.cy + head.mass * Math.max(1.62, bedarf.unten + .1), innerHeight - 62);
       return;
     }
     // 一墙脸：大而稀的网格，每格一颗头，名字在头下；
@@ -3074,11 +3078,15 @@ function layout() {
   const kopfH = dna.kopf.ry * 1.9;
   const bodyLen = dna.koerper.ratio * kopfH;
   const fussW = dna.kopf.ry + .16 + bodyLen;          // 头心到脚底（世界单位）
-  const span = bedarf.oben + fussW + .55;             // 头顶留边 + 全身 + 名字
-  head.mass = Math.min(innerHeight * .8 / span, innerWidth * .45 / (2 * bedarf.seite));
+  const span = bedarf.oben + fussW + 1.4;            // 头顶留边 + 腾空 .85 + 全身 + 名字
+  // 标题带与底部按钮带都从可用高度里显式扣除（原先只乘 .8，再扣带等于双重预留）；
+  // 20 = 名字半字高 + 缝——高度项绑定时名字恒悬在按钮带上方
+  const randOben = Math.max(innerHeight * .07, innerWidth < 720 ? 104 : 70);
+  const randUnten = innerWidth < 720 ? 72 : 53;      // 手机两行按钮带 / 桌面一行
+  head.mass = Math.max(1, Math.min((innerHeight - randOben - randUnten - 20) / span, innerWidth * .45 / (2 * bedarf.seite)));
   head.cx = innerWidth / 2;
-  // 手机端导航行横贯头顶（桌面只需让开标题带，矮窗口也有兜底）
-  head.cy = Math.max(innerHeight * .07, innerWidth < 720 ? 104 : 70) + bedarf.oben * head.mass;
+  // 腾空 .85 计入锚点：跳到顶时帽尖恰好贴住上沿留边（对任意 DNA/帽子精确成立）
+  head.cy = randOben + (bedarf.oben + .85) * head.mass;
   head.nameY = head.cy + (fussW + .45) * head.mass;
 }
 
@@ -3106,7 +3114,7 @@ if (!FOTO && !CROWD && !CLIP && !AVATAR) {
   // 单人页：点小人循环换表情（日常→笑→怒→难过→困）——落地页第一次本能动作就有回应
   if (!WAND) canvas.addEventListener('click', (e) => {
     const head = heads[0];
-    if (!head || !trifftGezeichnet(head, e.clientX, e.clientY)) return;
+    if (!head || !trifftGezeichnet(head, e.clientX, e.clientY, fussWeite(head))) return;
     const idx = GESICHT_FOLGE.findIndex((g) => g && head.gesicht === GESICHT_FORMEN[g]);
     const next = idx >= 0 ? (idx + 1) % GESICHT_FOLGE.length : 1;
     head.gesicht = GESICHT_FOLGE[next] ? GESICHT_FORMEN[GESICHT_FOLGE[next]] : null;
@@ -3143,10 +3151,13 @@ function syncAktionsUI(name) {
 }
 function waehleAktion(name) {
   if (!heads.length) return;
-  heads[0].setAktion(name, performance.now() / 1000, 0);
+  const t = performance.now() / 1000;
+  heads[0].setAktion(name, t, 0);
+  heads[0].akAuto = Math.max(heads[0].akAuto, t + 15);   // 手动接管后顺延自动动作钟，别一帧后被过期的随机动作顶掉
 }
 document.querySelectorAll('.ak').forEach((b) => b.addEventListener('click', () => waehleAktion(b.dataset.ak)));
 if (!WAND && !FOTO && !CROWD && !CLIP && !AVATAR) addEventListener('keydown', (e) => {
+  if (e.repeat) return;   // 长按连发会反复重掷过渡起点，把动作冻在 0.25s 插值半路
   if (e.ctrlKey || e.metaKey || e.altKey) return;   // 浏览器快捷键（Ctrl+1 切标签等）不触发动作
   const i = '12345'.indexOf(e.key);
   if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
@@ -3201,23 +3212,49 @@ function bodenZeichnen(t, head) {
       { x: fx + (fo + .1) * head.mass * schrumpf, y: bodenY + 3 + f },
     ], { spur: `schatten${f}`, w: 1, deckung: .22 * schrumpf, eckig: true });
   }
+  // 落地溅墨：land 相在脚边洒三粒墨点加两道短排线——落地有声。落地序号编进笔标签：
+  // 同一次落地内稳定（punkt 噪声与 tick 无关），下一跳重掷。相位门控排除下蹲相（它的 dy 也会 >.05）
+  if (head.akName === 'jump') {
+    const ph = (((t / 1.7) % 1) + 1) % 1;
+    const land = ph >= .78 ? Math.sin((ph - .78) / .22 * Math.PI) : 0;
+    if (land > .25 && pose.dy > .05) {
+      const nr = Math.floor(t / 1.7);
+      for (let i = 0; i < 3; i++) {
+        const dir = i - 1;
+        bodenStiftEinz.punkt(
+          { x: fx + dir * (.3 + .14 * ((nr + i) % 3)) * head.mass, y: bodenY + 2 + (nr + i) % 2 },
+          Math.max(1.3, head.mass * (.018 + .012 * land)), BODEN_TINTE,
+          { spur: `splat${nr}.${i}`, deckung: .45 * land });
+      }
+      for (const dir of [-1, 1]) bodenStiftEinz.zug([
+        { x: fx + dir * .16 * head.mass, y: bodenY + 2 },
+        { x: fx + dir * (.34 + .18 * land) * head.mass, y: bodenY + 4 },
+      ], { spur: `splatstrich${nr}.${dir}`, w: 1, deckung: .3 * land, eckig: true });
+    }
+  }
 }
 
 // 命中测试：帽檐宽、afro 高也算"这颗头"——量的是未缩放的本地坐标；
 // 下沿按实际肩底（b.unten）放宽——高颅骨胸像画到 1.5~1.67，固定 1.35 会让点肩块没反应。
 // 模块级（frame 也要用，不能藏在事件注册块的作用域里）
-const trifftKopf = (h, x, y) => {
+const trifftKopf = (h, x, y, tief = 0) => {
   const b = raumBedarf(h);
   const dx = (x - h.cx) / h.mass, dy = (y - h.cy) / h.mass;
-  return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < Math.max(1.35, b.unten + .05) && dy > -b.oben * 1.05;
+  return Math.abs(dx) < Math.max(1.3, b.seite * 1.1) && dy < Math.max(1.35, b.unten + .05) + tief && dy > -b.oben * 1.05;
 };
 
 // 命中前先把指针按"画出去的缩放"反算回本地（锚与 frame 的 transform 完全一致：脚边 nameY），
-// 悬停 3% 缓放、换人落纸弹入期间，画面多大命中区就多大——悬停与点击共用这一把尺
-const trifftGezeichnet = (h, x, y) => {
+// 悬停 3% 缓放、换人落纸弹入期间，画面多大命中区就多大——悬停与点击共用这一把尺；
+// 再按 motionPose 把动作位移（跳跃升降/走路横移）一并反算——人在空中也点得中。
+// tief 是可选的下沿放宽（单人全身命中传脚底高，整墙/放大走默认 0 行为不变）
+const trifftGezeichnet = (h, x, y, tief = 0) => {
   const k = h.zeigK || 1;
-  return trifftKopf(h, h.cx + (x - h.cx) / k, h.nameY + (y - h.nameY) / k);
+  const p = h.motionPose(performance.now() / 1000);
+  return trifftKopf(h, h.cx + (x - h.cx) / k - p.dx * h.mass, h.nameY + (y - h.nameY) / k - p.dy * h.mass, tief);
 };
+
+// 单人全身命中的下沿：脚底世界高（与 layout 的 fussW 同式）
+const fussWeite = (h) => h.dna.kopf.ry + .16 + h.dna.koerper.ratio * h.dna.kopf.ry * 1.9;
 
 let prev = performance.now();
 let wechselT = -9;   // 上次「换一个」的时刻：新人 0.25s 从 85% 弹到落定，与合影卡片/架子陈设同族曲线
@@ -3226,6 +3263,7 @@ function frame(now) {
   prev = now;
   // __freezeT 是调试钩子：固定时间戳用来截指定相位
   const t = (typeof window !== 'undefined' && window.__freezeT != null) ? window.__freezeT : now / 1000;
+  if (wechselT < 0 && !WAND) wechselT = t;   // 首屏弹入从首帧起算（仅单人页）：加载再慢也吃得到 0.25s 窗口
 
   papier();
   if (!WAND) bodenZeichnen(t, heads[0]);
@@ -3237,7 +3275,7 @@ function frame(now) {
   if (pointer.active && !(WAND && vergroessert >= 0)) {
     let bestD = 1e9;
     heads.forEach((h, i) => {
-      if (!trifftGezeichnet(h, pointer.x, pointer.y)) return;
+      if (!trifftGezeichnet(h, pointer.x, pointer.y, WAND ? 0 : fussWeite(h))) return;
       const d = Math.hypot(pointer.x - h.cx, pointer.y - h.cy) / h.mass;
       if (d < bestD) { bestD = d; hoverIdx = i; }
     });
