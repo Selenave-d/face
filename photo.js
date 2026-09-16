@@ -125,6 +125,11 @@ const REQUISITEN = {
   },
 };
 
+/* 负向（缺席）桶：'人/无/无镜/秃/短' 是「没长什么」而不是「长了什么」，人口占比
+ * 30%~85%，不封顶则几乎每个 10 人架子都藏着一整窝。计数夹到 3：缺席维度最多
+ * 凑出满堂红，四条/一整窝必须真有 5 个正向特征（过滤器+玩偶才是猎牌工具） */
+const MANGEL = { art: ['人'], kopf: ['无'], brille: ['无镜'], frisur: ['秃', '短'] };
+
 /* 计分管线：牌型 → 橡皮升级 → 灯笼基础分 → 旗帜/喇叭倍率 → 汇总 */
 function besteHand(kinder, items = []) {
   const dims = ['art', 'kopf', 'brille', 'frisur'];
@@ -137,6 +142,7 @@ function besteHand(kinder, items = []) {
       zaehl[v] = (zaehl[v] || 0) + 1;
     }
     for (const ex of extras) if (ex.dim === dim) zaehl[ex.value] = (zaehl[ex.value] || 0) + ex.n;
+    for (const v in zaehl) if (zaehl[v] > 3 && MANGEL[dim]?.includes(v)) zaehl[v] = 3;   // 缺席大桶最多按三条计
     const [name, basis, mult, info] = musterAusZaehl(zaehl);
     const punkte = (basis + kinder.length * 10) * mult;
     if (!best || punkte > best.punkte) best = { name, basis, mult, dim, punkte, info };
@@ -182,6 +188,7 @@ const KINDER_PRO_REIHE = 5;
 const kinder = [];
 let klassenSeed = (Math.random() * 1e9) | 0;   // 每次打开都是新的一班
 let gesamt = 0;                 // 累计总分
+let ziel = null;                // 班级征集令：本班目标牌型，命中 ×1.5（换班/换过滤器重掷）
 const knipsBtn = document.getElementById('knips');
 
 function neuesKind(platz) {
@@ -235,6 +242,15 @@ for (let p = 0; p < KINDER_PRO_REIHE * 2; p++) {
   kinder.push(kind);
 }
 
+/* 征集令掷点：权重照封顶后的可造度——三条近乎保底；一对/两对封顶后反而要
+ * 「避开」无镜/秃等大桶（反向难题），给小权重当辣题；四条/一整窝是过滤器+
+ * 玩偶才能稳定猎到的大奖 */
+function wuerfleZiel() {
+  ziel = strom((Math.random() * 1e9) | 0, 'ziel').weighted(
+    [['一对', 3], ['两对', 5], ['三条', 22], ['彩虹班', 12], ['满堂红', 16], ['四条', 8], ['一整窝', 6]]);
+}
+wuerfleZiel();                  // 首班也有征集令
+
 /* ================= 选择 ================= */
 
 const gewaehlt = new Set();
@@ -257,7 +273,13 @@ function waehle(kind, t) {
     gewaehlt.delete(idx);
     kind.face = 'ruhig';
   } else {
-    if (gewaehlt.size >= 5) return false;
+    if (gewaehlt.size >= 5) {
+      // 已满 5 个：不选中但别静默——恼一下 + 往下一蹲
+      // （复用小情绪自愈：launeBis 到点主循环自动还原 ruhig；负 hopAmp = 反向蹲）
+      kind.laune = 'boese'; kind.face = 'boese'; kind.launeBis = t + .45;
+      kind.hopT = t; kind.hopAmp = -.12;
+      return false;
+    }
     gewaehlt.add(idx);
     kind.hopT = t;              // 选中原地小跳一下
     kind.hopAmp = .3;
@@ -359,6 +381,10 @@ function draftPick(i, t) {
 function knips(t) {
   if (gewaehlt.size !== 5 || phase !== 'idle') return;
   ergebnis = besteHand([...gewaehlt].map((i) => kinder[i]), besitz);
+  if (ziel && ergebnis.name === ziel) {   // 征集令命中：×1.5，banner 经 notes 自动带出注记
+    ergebnis = { ...ergebnis, punkte: Math.round(ergebnis.punkte * 1.5),
+      notes: [...(ergebnis.notes ?? []), '征集令×1.5'] };
+  }
   gesamt += ergebnis.punkte;
   bannerBis = t + 2;
   // 冲洗一张贴纸照片：记住这五个人和牌型
@@ -390,6 +416,7 @@ function neueKlasse() {
   ergebnis = null;
   draft = null;
   dekoSaat = Math.floor(Math.random() * 1e9);
+  wuerfleZiel();                // 新一班新征集（换过滤器重抽一班时也跟着换目标）
   kinder.length = 0;
   const t = performance.now() / 1000;
   for (let p = 0; p < KINDER_PRO_REIHE * 2; p++) {
@@ -653,11 +680,35 @@ function zeichneGesamt() {
   // 手机端总分靠左，与右侧物种过滤器同一行；桌面居中在标题下
   if (innerWidth < 720) { ctx.textAlign = 'left'; ctx.fillText(`总分 ${gesamt}`, 16, 104); }
   else ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, 64);
-  // 长按逗表情的小提示（只在待机时显示，放在孩子头顶上方的空白带）
+  // 首访教学：没拍过照且没选满时先教核心循环；选满或拍过后回到长按彩蛋
   if (phase === 'idle') {
     ctx.fillStyle = '#a89f93';
-    ctx.fillText('长按孩子 逗一下表情', innerWidth / 2, 170);
+    ctx.fillText(!abzuege.length && gewaehlt.size < 5
+      ? `点孩子 选 5 个一起拍（还差 ${5 - gewaehlt.size} 个）`
+      : '长按孩子 逗一下表情', innerWidth / 2, 170);
   }
+  ctx.restore();
+}
+
+// 班级征集令：手绘虚线小广告框（楷体）——贴在左上标题下的空白墙带，避开 banner 与右侧过滤器
+function zeichneZiel() {
+  if (!ziel) return;
+  const txt = `征集令 ${ziel} ×1.5`;
+  ctx.save();
+  ctx.font = '13px "Kaiti", "STKaiti", "楷体", serif';
+  try { ctx.letterSpacing = '0px'; } catch (e) { /* 旧浏览器忽略 */ }
+  const bw = ctx.measureText(txt).width + 20;
+  ctx.translate((innerWidth < 720 ? 16 : 34) + bw / 2, innerWidth < 720 ? 128 : 112);
+  ctx.rotate(-.02);
+  ctx.strokeStyle = '#b0654a';
+  ctx.setLineDash([6, 4]);
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(-bw / 2, -11, bw, 22);
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#b0654a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, 0, 0);
   ctx.restore();
 }
 
@@ -1010,6 +1061,7 @@ function rahmen(now) {
     if (kinder[i].zustand === 'da') zeichneWahl(kinder[i], t);
   }
   zeichneGesamt();
+  zeichneZiel();
   zeichneBanner(t);
   zeichneBesitz(t);
   zeichneDraft(t);
