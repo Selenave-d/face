@@ -125,7 +125,8 @@ function texte(seed) {
 // 竖版剪报：宽高比 0.74，居中，四周留边
 function blattGeometrie() {
   const rand = 26;
-  const w = Math.min(innerWidth - rand * 2, (innerHeight - rand * 2 - 40) * .74, 600);
+  // 手机端多让的顶部 74px（导航行）同步从高度预算里扣除：矮窗纸底不再恒溢出画布 8px、铅字不再压底部按钮
+  const w = Math.min(innerWidth - rand * 2, (innerHeight - rand * 2 - 40 - (innerWidth < 720 ? 74 : 0)) * .74, 600);
   const h = w / .74;
   // 手机端纸面顶端让开标题下的导航行（底部 89）；
   // 桌面窄窗时右上导航只会压到纸角的撕边空白，可读内容从报头起，不算叠
@@ -499,7 +500,7 @@ function rahmen(now) {
   // 头版第二张脸用死指针——只呼吸眨眼，不跟着鼠标转头
   kopf.update(dt, t, pointer);
   kopf2.update(dt, t, TOTER_ZEIGER);
-  papier();
+  papierSchnell();   // 底纹离屏拓印（photo/crowd 同款）：三遍全屏 fill 换一张 drawImage
   const wE = Math.min(1, Math.max(0, (t - wechselZeit) / .3));
   if (wE >= 1) { zeichneBlatt(t); requestAnimationFrame(rahmen); return; }
   const wk = .94 + .06 * wE + .05 * Math.sin(Math.PI * wE);   // wE=0→.94，中途≈1.02 过冲，wE=1→恰 1

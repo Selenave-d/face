@@ -24,9 +24,10 @@ let kopf = neuesKopf(saat);
 let uiStift = null, uiTick = -1;
 
 // 方形舞台：居中偏上，避开顶部标题（手机端导航更高，多让）、动作行与底部按钮；
-// 手机端手势按钮折两行更高，底边预算 216→266——横屏/矮窗不再压到按钮
+// 手机端手势按钮折两行更高，底边预算 216→266——横屏/矮窗不再压到按钮；
+// 120 下限只在窗口装得下时生效（比 266 预算还矮的横屏：不虚构空间，舞台跟着缩）
 function buehne() {
-  const s = Math.max(120, Math.min(innerWidth - 32, innerHeight - (innerWidth < 720 ? 266 : 216)));
+  const s = Math.max(Math.min(120, innerHeight - (innerWidth < 720 ? 262 : 212)), Math.min(innerWidth - 32, innerHeight - (innerWidth < 720 ? 266 : 216)));
   const yMin = innerWidth < 720 ? 150 : 78;
   return { s, x: (innerWidth - s) / 2, y: Math.max(yMin, (innerHeight - 62 - s) / 2) };
 }
@@ -125,7 +126,7 @@ function rahmen(now) {
   gesichtTick(t);
   hookSync();
   gesichtKnopfe();
-  papier();
+  papierSchnell();   // 底纹离屏拓印（photo/crowd 同款）：三遍全屏 fill 换一张 drawImage
   zeichneBuehne(t);
   requestAnimationFrame(rahmen);
 }
