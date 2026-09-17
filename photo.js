@@ -149,6 +149,7 @@ function besteHand(kinder, items = []) {
   }
   const notes = [];
   for (const ex of extras) if (ex.dim === best.dim) notes.push(ex.note);
+  const original = best.name;   // 橡皮升级前的原始牌名（无橡皮时 === name，去重交给下文 Set）：征集令/年鉴按它判——持有橡皮不会让「一对」永远收不到
   // 橡皮：只有一对时擦掉一个异类，升级为两对
   if (best.name === '一对' && items.some((it) => it.familie === 'xiangpi')) {
     best = { ...best, name: '两对', basis: 35, mult: 2 };
@@ -173,7 +174,7 @@ function besteHand(kinder, items = []) {
     notes.push(REQUISITEN.laba.note());
   }
   const punkte = (basis + kinder.length * 10) * mult;
-  return { ...best, basis, mult, punkte, notes };
+  return { ...best, original, basis, mult, punkte, notes };
 }
 
 /* ================= 班级过滤器 =================
@@ -353,6 +354,10 @@ let draftZaehler = 0;
  * 最多叠三张当成绩册——旧的垫在下面，越旧越偏越淡。 */
 const abzuege = [];           // { recs: [...5], titel }
 
+/* 毕业年鉴：拍过的牌型集邮册。一种牌型头回拍到 +200、贴纸盖「首」印；
+ * 七种集齐全班错峰齐跳庆毕业。换班不清（与总分/道具同款跨班记忆）。 */
+const jahrbuch = new Set();
+
 /* 墨渍：墨水介质的孩子离场时，在站过的架子上留一片渐渐变淡的墨渍（墙上的记忆） */
 const mauernFlecken = [];     // { fx, reihe, seed, von }——存槽位分数与行号，绘制时按当前窗口重投影（架子线随 resize 变，墨渍钉在架上不悬空）
 
@@ -381,16 +386,22 @@ function draftPick(i, t) {
 function knips(t) {
   if (gewaehlt.size !== 5 || phase !== 'idle') return;
   ergebnis = besteHand([...gewaehlt].map((i) => kinder[i]), besitz);
-  if (ziel && ergebnis.name === ziel) {   // 征集令命中：×1.5，banner 经 notes 自动带出注记
+  // 年鉴首录：升级后与升级前的名字都算（橡皮把一对升成两对，不影响「一对」的收录）
+  const neu = [...new Set([ergebnis.name, ergebnis.original])].filter((n) => n && !jahrbuch.has(n));
+  const erste = neu.length > 0;
+  neu.forEach((n) => jahrbuch.add(n));
+  if (ziel && (ergebnis.name === ziel || ergebnis.original === ziel)) {   // 征集令命中（原始牌也算）：×1.5，banner 经 notes 自动带出注记
     ergebnis = { ...ergebnis, punkte: Math.round(ergebnis.punkte * 1.5),
       notes: [...(ergebnis.notes ?? []), '征集令×1.5'] };
   }
-  gesamt += ergebnis.punkte;
+  if (erste) ergebnis = { ...ergebnis, notes: [...(ergebnis.notes ?? []), '年鉴新收录+200'] };
+  gesamt += ergebnis.punkte + (erste ? 200 : 0);   // 先乘后加：+200 是集邮固定赏，不进征集令 ×1.5
   bannerBis = t + 2;
   // 冲洗一张贴纸照片：记住这五个人和牌型
   abzuege.push({
     recs: [...gewaehlt].map((i) => kinder[i].rec),
     titel: ergebnis.name,
+    stempel: erste,             // 首录牌型：拍立得白带上盖一枚「首」印
     datum: `${new Date().getMonth() + 1}月${new Date().getDate()}日`,   // 拍立得白带的手写日期
   });
   if (abzuege.length > 3) abzuege.shift();
@@ -401,6 +412,16 @@ function knips(t) {
   for (const i of gewaehlt) {
     kinder[i].hopT = t + staffel++ * .06;   // 拍照齐跳（略错峰）
     kinder[i].hopAmp = .5;
+  }
+  if (erste && jahrbuch.size >= 7) {        // 补全第七种的那张触发一次：全班再错峰齐跳，庆毕业
+    let feier = 0;
+    kinder.forEach((k, ki) => {
+      if (k.zustand !== 'da' || gewaehlt.has(ki)) return;   // 被选的 5 人保留拍照齐跳那波，别被庆祝覆盖
+      k.hopT = t + .5 + feier++ * .09;      // 晚半秒起跳，与拍照那波错开
+      k.hopAmp = .55;
+      k.face = 'froh';
+    });
+    ergebnis = { ...ergebnis, notes: [...(ergebnis.notes ?? []), '毕业快乐！'] };
   }
 }
 knipsBtn.addEventListener('click', () => knips(performance.now() / 1000));
@@ -446,7 +467,7 @@ function phaseTick(t) {
     for (const i of gewaehlt) {
       const kind = kinder[i];
       kind.zustand = 'geht'; kind.seit = t; kind.face = 'weint';
-      if (kind.rec.media === 'ink' || kind.rec.media === 'marker') {   // 墨水渗墨渍、马克笔蹭出划痕
+      if (kind.rec.media === 'ink' || kind.rec.media === 'marker' || kind.rec.media === 'watercolour') {   // 墨水渗墨渍、马克笔蹭划痕、水彩晕出淡彩痕
         // 存槽位分数 + 行号（clip.js 锈斑同款）：resize 后按架子线重投影，不再悬空/入地
         mauernFlecken.push({ fx: (kind.platz % KINDER_PRO_REIHE + .5) / KINDER_PRO_REIHE,
           reihe: Math.floor(kind.platz / KINDER_PRO_REIHE), seed: kind.rec.seed, von: t,
@@ -817,7 +838,8 @@ function zeichneDraft(t) {
 }
 
 // 墨渍：两三个交叠的歪圆，形状随种子定死（干了的墨不再沸腾），24 秒内慢慢淡去；
-// 马克笔痕：两三杠粗圆头短线蹭在墙上——没盖笔帽的划痕，颜色用孩子自己的淡彩池
+// 马克笔痕：两三杠粗圆头短线蹭在墙上——没盖笔帽的划痕，颜色用孩子自己的淡彩池；
+// 水彩痕：两三圈更大更淡的彩圆——蹭上墙的湿颜料慢慢晕开，同款随种子定形、24 秒淡去
 function zeichneMauernFlecken(t) {
   for (let i = mauernFlecken.length - 1; i >= 0; i--) {
     const f = mauernFlecken[i];
@@ -844,6 +866,22 @@ function zeichneMauernFlecken(t) {
         ctx.moveTo(f.x + ox - Math.cos(winkel) * laenge / 2, f.y + oy - Math.sin(winkel) * laenge / 2);
         ctx.lineTo(f.x + ox + Math.cos(winkel) * laenge / 2, f.y + oy + Math.sin(winkel) * laenge / 2);
         ctx.stroke();
+      }
+      ctx.restore();
+      continue;
+    }
+    if (f.media === 'watercolour') {
+      // 低透明淡彩圆 ×3：半径 ≈ 墨渍 ×1.4、α 减半（水会晕开、颜色更淡更透）；
+      // 形状只吃 f.seed + 整数 dx，不吃时间——干了的彩不重掷（同墨渍）
+      const rgb = WASH_POOL[Math.min(WASH_POOL.length - 1, Math.floor((f.farbe ?? .5) * WASH_POOL.length))];
+      ctx.save();
+      for (const [dx, dy, r] of [[0, 0, 22], [14, 9, 13], [-12, 11, 10]]) {
+        const pts = kreisPts(f.x + dx, f.y + dy, r, r * .85, 12, .18, f.seed + dx);
+        ctx.beginPath();
+        pts.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${.13 * (1 - alter / 24)})`;
+        ctx.fill();
       }
       ctx.restore();
       continue;
@@ -885,6 +923,20 @@ function abZeichnen(c, st, ab, w, band, h, qt, mob) {
   c.textBaseline = 'middle';
   c.fillStyle = '#8b8894';
   c.fillText(ab.titel, w / 2, h - band / 2 + 1);
+  // 年鉴首录：白带左端一枚歪「首」印（朱红方框 + 楷体）；textAlign/baseline 沿用上面 titel 的居中设置
+  if (ab.stempel) {
+    const ss = mob ? 5 : 6.5;   // 半边长：rotate(.35) 后外扩 ×1.28，22/28 的带高里不啃上下边线
+    c.save();
+    c.translate(20, h - band / 2 + 1);
+    c.rotate(.35);
+    c.strokeStyle = '#b0654a';
+    c.lineWidth = 1.1;
+    c.strokeRect(-ss, -ss, ss * 2, ss * 2);
+    c.font = `${mob ? 7 : 9}px "Kaiti", "STKaiti", "楷体", serif`;
+    c.fillStyle = '#b0654a';
+    c.fillText('首', 0, 0);
+    c.restore();
+  }
   // 白带右端手写日期角标：拍立得在相纸边写日期的惯例
   c.save();
   c.translate(w - 16, h - band / 2 + 1);
@@ -1094,5 +1146,6 @@ window.__foto = {
   besitz: () => besitz.map((b) => b.familie),
   abzuege: () => abzuege.length,
   flecken: () => mauernFlecken.length,
+  jahr: () => [...jahrbuch],   // 毕业年鉴：已收录牌型（无头验证 7/7 与首录判定）
   filter,
 };
