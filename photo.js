@@ -16,7 +16,9 @@ function kindZuege(kind) {
 
 // 一个维度 5 个取值 → [牌型名, 基础分, 倍率, 共享值说明]
 function musterAusZaehl(zaehl) {
-  const eintraege = Object.entries(zaehl).sort((a, b) => b[1] - a[1]);
+  // 道具 +1 会把满窝数到 6（收全 6 家后可重复，最多 +2 到 7）：入口先封顶 5，
+  // 别让「一整窝+玩偶/眼镜盒」跌回彩虹班；正常 5 人计数本就 ≤5，封顶只影响道具加成
+  const eintraege = Object.entries(zaehl).map(([v, n]) => [v, Math.min(5, n)]).sort((a, b) => b[1] - a[1]);
   const c = eintraege.map((e) => e[1]);
   if (c[0] === 5) return ['一整窝', 160, 8, `全是${eintraege[0][0]}`];
   if (c[0] === 4) return ['四条', 110, 5, `四个${eintraege[0][0]}`];
@@ -394,7 +396,7 @@ function knips(t) {
     ergebnis = { ...ergebnis, punkte: Math.round(ergebnis.punkte * 1.5),
       notes: [...(ergebnis.notes ?? []), '征集令×1.5'] };
   }
-  if (erste) ergebnis = { ...ergebnis, notes: [...(ergebnis.notes ?? []), '年鉴新收录+200'] };
+  if (erste) ergebnis = { ...ergebnis, notes: [...(ergebnis.notes ?? []), '年鉴+200'] };
   gesamt += ergebnis.punkte + (erste ? 200 : 0);   // 先乘后加：+200 是集邮固定赏，不进征集令 ×1.5
   bannerBis = t + 2;
   // 冲洗一张贴纸照片：记住这五个人和牌型
@@ -688,7 +690,8 @@ function zeichneBanner(t) {
   const detail = ergebnis.info ? `${dimName}·${ergebnis.info}` : dimName;
   const requis = ergebnis.notes?.length ? `　${ergebnis.notes.join(' ')}` : '';
   // 手机端横幅下移，避开右上角的过滤器两行（其下沿约 145）
-  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, innerWidth < 720 ? 164 : 92);
+  // 等式+notes 在窄屏必超宽（360px 仅等式就 ~410px）：maxWidth 整体压回屏内（与手机端 16px 边距一致）
+  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, innerWidth < 720 ? 164 : 92, innerWidth - 32);
   ctx.restore();
 }
 

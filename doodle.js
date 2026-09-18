@@ -373,10 +373,16 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
   }
   /* —— 原语 haut：头与身体的处理 —— */
   function haut(pts, dunkel, opt = {}) {
-    if (flachModus) {   // 微型深色一次平涂，浅色留纸白
+    if (flachModus) {   // 微型：深色一次平涂、浅色水彩/马克留介质淡彩（石墨/墨水浅色仍留纸白）
       if (dunkel) {
         ctx.save(); poly(pts);
-        ctx.fillStyle = `rgba(${M.farbe},.5)`;
+        ctx.fillStyle = istWash
+          ? `rgba(120,105,100,${Math.min(.6, M.dunkelWash ?? .45)})`   // marker .85 封到 .6：贴纸小尺寸别糊成实心
+          : `rgba(${M.farbe},.5)`;
+        ctx.fill(); ctx.restore();
+      } else if (istWash) {
+        ctx.save(); poly(pts);
+        ctx.fillStyle = `rgba(${washRGB.join(',')},${mediaId === 'marker' ? .35 : (M.wash ?? .3)})`;
         ctx.fill(); ctx.restore();
       }
       return;
@@ -543,7 +549,7 @@ function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
         stift.line(bogenPts(x, ey + .03 * k, .09 * k * sc, .09 * k * sc, Math.PI * 1.12, Math.PI * 1.88, 8), 1.5, { label: 38 + seite });
         break;
       case 'closed':
-        stift.line(bogenPts(x, ey, .09 * k * sc, .07 * k * sc, Math.PI * .15, Math.PI * .85, 6), 1.5, { label: 39 + seite });
+        stift.line(bogenPts(x, ey, .09 * k * sc, .07 * k * sc, Math.PI * 1.15, Math.PI * 1.85, 6), 1.5, { label: 39 + seite });
         break;
       case 'sleepy':
         stift.line([[x - .09 * k * sc, ey - .03 * k], [x + .09 * k * sc, ey - .03 * k]], 1.4, { label: 40 + seite });
