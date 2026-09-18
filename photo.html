@@ -51,6 +51,9 @@
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
   #leiste button:disabled { opacity: .45; cursor: default; }
   #leiste button:disabled:hover { color: #7a7268; border-color: #c9c1b5; }
+  button:focus-visible, a:focus-visible {
+    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 999px;
+  }
   /* 手机端：标题换行、导航与过滤器收紧、按钮条折行、去双击缩放 */
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
@@ -70,7 +73,7 @@
 </style>
 </head>
 <body data-modus="foto">
-<canvas id="blatt"></canvas>
+<canvas id="blatt" role="img" aria-label="两排手绘小孩站在架子上，点五个拍合影"></canvas>
 <div id="titel">我的 <mark>朋友们</mark> 要拍 <mark>合影</mark></div>
 <div class="sprung">
   <a href="index.html">一个人</a>

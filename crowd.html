@@ -42,6 +42,9 @@
   #schieber:focus-visible {
     outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 14px;
   }
+  button:focus-visible, a:focus-visible {
+    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 999px;
+  }
   #andere {
     position: fixed; right: 34px; bottom: 48px;
     font: 12px/1 "Courier New", monospace; letter-spacing: 3px; color: #7a7268;
@@ -64,7 +67,7 @@
 </style>
 </head>
 <body data-modus="crowd">
-<canvas id="blatt"></canvas>
+<canvas id="blatt" role="img" aria-label="一群手绘小人站在纸上"></canvas>
 <div id="titel">我的 <mark id="zahl">1</mark> 个 <mark>朋友</mark> 都是 <mark>javascript</mark> 画的</div>
 <div id="zaehler">1 / 500</div>
 <div class="sprung">

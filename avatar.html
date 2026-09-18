@@ -47,6 +47,9 @@
   }
   #gesichte button:hover { color: #2b2320; border-color: #2b2320; }
   #gesichte button.an { color: #2e2839; border-style: solid; border-color: #2e2839; }
+  button:focus-visible, a:focus-visible {
+    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 999px;
+  }
   /* 手机端：标题换行、导航收紧、按钮条折行、去双击缩放 */
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
@@ -64,7 +67,7 @@
 </style>
 </head>
 <body data-modus="avatar">
-<canvas id="blatt"></canvas>
+<canvas id="blatt" role="img" aria-label="方形舞台上一幅手绘小人胸像"></canvas>
 <div id="titel">我的 <mark>头像</mark> 也是 <mark>javascript</mark> 画的</div>
 <div class="sprung">
   <a href="index.html">一个人</a>

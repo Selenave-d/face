@@ -28,6 +28,9 @@
     padding: 9px 18px 8px 21px; cursor: pointer; user-select: none;
   }
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
+  button:focus-visible, a:focus-visible {
+    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 999px;
+  }
   #leiste button.aktiv { color: #f6f2ea; background: #2e2839; border-color: #2e2839; }
   .sprung {
     position: fixed; top: 34px; right: 34px;
@@ -52,7 +55,7 @@
 </style>
 </head>
 <body>
-<canvas id="blatt"></canvas>
+<canvas id="blatt" role="img" aria-label="一个手绘小人站在纸上"></canvas>
 <div id="titel">我的 <mark>朋友们</mark> 都是 <mark>javascript</mark> 画的</div>
 <div class="sprung">
   <a href="heads.html">一墙脸</a>

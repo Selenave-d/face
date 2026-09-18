@@ -36,6 +36,9 @@
     padding: 9px 18px 8px 21px; cursor: pointer; user-select: none;
   }
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
+  button:focus-visible, a:focus-visible {
+    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 999px;
+  }
   /* 手机端：标题换行、导航收紧、按钮条折行、去双击缩放（放基础规则之后才能覆盖） */
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
@@ -51,7 +54,7 @@
 </style>
 </head>
 <body data-modus="wand">
-<canvas id="blatt"></canvas>
+<canvas id="blatt" role="img" aria-label="一整面墙的手绘小人脸"></canvas>
 <div id="titel">我的 <mark>朋友们</mark> 都是 <mark>javascript</mark> 画的</div>
 <div class="sprung">
   <a href="index.html">一个人</a>
