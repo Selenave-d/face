@@ -60,9 +60,9 @@ const ARTEN = {
       eyes: { type: { saucer: 28, dot: 20, wide: 12, happy: 10, sleepy: 10, sparkle: 8, closed: 6, angry: 4, spiral: 2 } },
       mouth: { style: { wobble: 22, tiny: 18, smirk: 14, frown: 12, zigzag: 10, grit: 8, buckteeth: 8, stitch: 4, tongue: 4 } },
       nose: { style: { none: 30, button: 28, line: 24, triangle: 18 } },
-      hair: { style: { bald: 10, bob: 13, messy: 12, spiky: 10, bowl: 10, curly: 9, buzz: 8, afro: 6, pigtails: 8, long: 6, buns: 5, topknot: 4, mohawk: 3, cowlick: 3 } },
+      hair: { style: { bald: 10, bob: 11, messy: 10, spiky: 10, bowl: 10, curly: 9, buzz: 8, afro: 6, pigtails: 8, long: 6, sidepony: 5, buns: 5, topknot: 4, mohawk: 3, cowlick: 3 } },
       tail: { style: { none: 100 } },
-      extras: { spots: .06, freckles: .32, whiskers: 0, glasses: .2, tears: .12 },
+      extras: { spots: .06, freckles: .18, whiskers: 0, glasses: .26, tears: .12, scarf: .12 },
     },
   },
   dog: {
@@ -75,7 +75,7 @@ const ARTEN = {
       mouth: { style: { cat: 38, tongue: 26, wobble: 18, tiny: 10, buckteeth: 8 } },
       hair: { style: { bald: 88, messy: 8, cowlick: 4 } },
       tail: { style: { wag: 55, curl: 30, puff: 15 } },
-      extras: { spots: .5, freckles: .1, whiskers: .25, glasses: .05, tears: .05 },
+      extras: { spots: .5, freckles: .1, whiskers: .25, glasses: .05, tears: .05, scarf: .1 },
     },
   },
   cat: {
@@ -88,7 +88,7 @@ const ARTEN = {
       mouth: { style: { cat: 78, tiny: 12, tongue: 10 } },
       hair: { style: { bald: 90, messy: 10 } },
       tail: { style: { curl: 55, wag: 35, puff: 10 } },
-      extras: { whiskers: .9, spots: .3, freckles: .1, glasses: .05, tears: .05 },
+      extras: { whiskers: .9, spots: .3, freckles: .1, glasses: .05, tears: .05, scarf: .06 },
     },
   },
   rabbit: {
@@ -101,7 +101,7 @@ const ARTEN = {
       mouth: { style: { buckteeth: 55, cat: 25, tiny: 20 } },
       hair: { style: { bald: 90, messy: 10 } },
       tail: { style: { puff: 80, none: 20 } },
-      extras: { whiskers: .5, freckles: .2, spots: .2, glasses: .05, tears: .05 },
+      extras: { whiskers: .5, freckles: .2, spots: .2, glasses: .05, tears: .05, scarf: .08 },
     },
   },
   bear: {
@@ -114,7 +114,7 @@ const ARTEN = {
       mouth: { style: { wobble: 40, cat: 25, tiny: 20, tongue: 15 } },
       hair: { style: { bald: 92, messy: 8 } },
       tail: { style: { puff: 60, none: 40 } },
-      extras: { spots: .1, freckles: .15, whiskers: .1, glasses: .08, tears: .05 },
+      extras: { spots: .1, freckles: .15, whiskers: .1, glasses: .08, tears: .05, scarf: .2 },
     },
   },
   // 梦魇（仿 name-me 的 nightmare）：尖角 + 锯齿嘴 + 空洞眼/旋涡眼，
@@ -129,7 +129,7 @@ const ARTEN = {
       mouth: { style: { zigzag: 45, stitch: 20, frown: 15, wobble: 10, tiny: 10 } },
       hair: { style: { bald: 85, messy: 15 } },
       tail: { style: { curl: 55, wag: 20, none: 25 } },
-      extras: { spots: .35, freckles: 0, whiskers: 0, glasses: 0, tears: .12 },
+      extras: { spots: .35, freckles: 0, whiskers: 0, glasses: 0, tears: .12, scarf: .05 },
     },
   },
 };
@@ -206,6 +206,7 @@ function doodleRecipe(seed, erzwinge = {}) {
       whiskers: cX.chance(rX, 'whiskers', 0),
       glasses: cX.chance(rX, 'glasses', .18),
       tears: cX.chance(rX, 'tears', .1),
+      scarf: cX.chance(rX, 'scarf', 0),
     },
     anim: { phase: rA.n() * TAU2, tempo: rA.range(.8, 1.3), blink: dRng(seed, 'blinzeln') },
   };
@@ -476,7 +477,7 @@ function zeichneBrauen(stift, rec, k, face) {
   if (face !== 'boese' && face !== 'angst') return;
   const ex = .44 * rec.skull.wf * rec.skull.s * .44 * rec.eyes.sx * k;
   // 发盖下缘（与 zeichneHair 的 yCut 同式）：眉压进刘海时下移到缘下 .04k，不再横在 bob 刘海上
-  const kappe = ['bob', 'bowl', 'long', 'pigtails', 'buns', 'topknot', 'cowlick'].includes(rec.hair.style);
+  const kappe = ['bob', 'bowl', 'long', 'pigtails', 'sidepony', 'buns', 'topknot', 'cowlick'].includes(rec.hair.style);
   const yCut = kappe ? -.95 * k - .44 * rec.skull.s * k * (rec.hair.style === 'bowl' ? .45 : .25) : -1e9;
   const ey = Math.max(yCut + .04 * k, -.98 * k - .13 * k * rec.eyes.scale);
   for (const s of [-1, 1]) {
@@ -843,7 +844,7 @@ function zeichneHair(stift, rec, k, kopf) {
   const R = .44 * s.s * k;
   const cy = -.95 * k;
   switch (h) {
-    case 'bob': case 'bowl': case 'long': case 'pigtails': case 'buns': case 'topknot': case 'cowlick': {
+    case 'bob': case 'bowl': case 'long': case 'pigtails': case 'sidepony': case 'buns': case 'topknot': case 'cowlick': {
       // 发盖：从一侧颞部过头顶到另一侧，下缘是眼睛上方的一道波浪线
       const a0 = Math.PI * (h === 'bowl' ? 1.12 : .95), a1 = Math.PI * (h === 'bowl' ? 1.88 : 2.05);
       const oben = bogenPts(0, cy, R * 1.04 * s.wf, R * 1.05, a0, a1, 18);
@@ -867,6 +868,18 @@ function zeichneHair(stift, rec, k, kopf) {
           const bx = sd * R * 1.05, by = cy - R * .1;
           stift.line(kreisPts(bx, by, R * .22, R * .3, 12, .1, rec.seed + sd), 1.5, { closed: true, label: 124 + sd });
           stift.line([[bx - sd * R * .1, by - R * .2], [bx + sd * R * .12, by + R * .25]], 1, { label: 125 + sd, alpha: .5 });
+        }
+      }
+      if (h === 'sidepony') {
+        // 侧马尾：只扎 sd 一侧的辫球（连缎带短线一起搬），另一侧发盖边补三根鬓角
+        const sd = _h2(rec.seed, 27) % 2 ? 1 : -1;
+        const bx = sd * R * 1.05, by = cy - R * .1;
+        stift.line(kreisPts(bx, by, R * .22, R * .3, 12, .1, rec.seed + sd), 1.5, { closed: true, label: 124 + sd });
+        stift.line([[bx - sd * R * .1, by - R * .2], [bx + sd * R * .12, by + R * .25]], 1, { label: 125 + sd, alpha: .5 });
+        const r = _mb(_h2(rec.seed, 29));
+        for (let i = 0; i < 3; i++) {
+          const sx = -sd * R * (.82 + r() * .1);
+          stift.line([[sx, yCut + .02 * k], [sx - sd * .02 * k, yCut - .06 * k - r() * .05 * k]], 1, { label: 115 + i, alpha: .6 });
         }
       }
       if (h === 'buns' || h === 'topknot') {
@@ -966,6 +979,24 @@ function zeichneSchwanz(stift, rec, k, wag) {
     stift.line(pts, 1.4, { label: 142 });
   } else {
     stift.line(kreisPts(bx + .1 * k, by, .1 * k, .1 * k, 10, .18, rec.seed + 3), 1.4, { closed: true, label: 143 });
+  }
+}
+
+/* 围巾：脖处两道平行弧 + 一侧垂尾飘带。画在躯干后、头前——弧中段从下巴两侧露出 */
+function zeichneSchal(stift, rec, k) {
+  const b1 = bogenPts(0, -.52 * k, .21 * k, .05 * k, Math.PI * .1, Math.PI * .9, 8);
+  const b2 = bogenPts(0, -.485 * k, .21 * k, .05 * k, Math.PI * .12, Math.PI * .88, 8);
+  if (stift.istWash) stift.tone(b1.concat([...b2].reverse()), { label: 180, k });   // 水彩/马克：带子给淡彩细节
+  stift.line(b1, 1.5, { label: 181 });
+  stift.line(b2, 1.4, { label: 182, alpha: .85 });
+  // 垂尾：从第二条弧的一端向躯干中部垂下的双飘线
+  const sd = _h2(rec.seed, 29) % 2 ? 1 : -1;
+  for (let i = 0; i < 2; i++) {
+    stift.line([
+      [sd * (.17 + i * .035) * k, -.47 * k],
+      [sd * (.13 + i * .05) * k, -.3 * k],
+      [sd * (.1 + i * .06) * k, -.24 * k - i * .02 * k],
+    ], 1.3, { label: 183 + i, alpha: .9 });
   }
 }
 
@@ -1089,6 +1120,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   const koerper = kreisPts(0, -.33 * k, .26 * k, .21 * k, 18, .05, rec.seed + 11);
   stift.haut(koerper, torsoDark(rec), { k, winkel: -.55 });   // 身体排线与头错开角度，交叉出铜版画味
   stift.line(koerper, 1.5, { closed: true, label: 13 });
+  if (rec.extras.scarf) zeichneSchal(stift, rec, k);
   // 手臂：细棍下垂（根扎躯干轮廓内：.27/−.4 在椭圆外悬空约 5px，收到 .23/−.36）
   for (const s of [-1, 1]) {
     stift.line([[s * .23 * k, -.36 * k], [s * .36 * k, -.18 * k]], 1.4, { label: 174 + s });
@@ -1133,7 +1165,7 @@ function doodleDims(rec) {
       : c === 'halo' ? '光环' : '无',
     brille: rec.extras.glasses ? '有镜' : '无镜',
     frisur: rec.hair.style === 'bald' ? '秃'
-      : ['pigtails', 'long'].includes(rec.hair.style) ? '长'
+      : ['pigtails', 'long', 'sidepony'].includes(rec.hair.style) ? '长'
       : ['buns', 'topknot'].includes(rec.hair.style) ? '髻'
       : ['afro', 'curly', 'messy'].includes(rec.hair.style) ? '卷' : '短',
   };

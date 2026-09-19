@@ -584,10 +584,12 @@ const GESICHT_FORMEN = {
 };
 const GESICHT_FOLGE = ['', 'froh', 'boese', 'traurig', 'muede'];   // 循环顺序：日常→笑→怒→难过→困
 const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2], ['schal', .7]];
-const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4]];
+const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4], ['muttermal', 1]];
 const ZIERRAT_W = [['keiner', 7], ['ohrring', 1.2], ['pflaster', .8]];
 // 这些发型会盖住头顶，发带/便帽/耳机就不出现了
 const HOHE_FRISUREN = new Set(['haube', 'pony', 'seitenscheitel', 'lockenwolke', 'igel', 'zoepfe', 'dutt', 'afro']);
+// 侧分/刺猬/双辫/丸子：发壳薄、额带箍得住，stirnband 放行（帽仍走原过滤）
+const STIRNBAND_OK = new Set(['seitenscheitel', 'igel', 'zoepfe', 'dutt']);
 
 // 中文姓名：常见姓 + 1~2 个名用字
 const XING = ['王', '李', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴', '徐', '孙', '马', '朱', '胡', '郭', '何', '林', '罗', '郑', '梁', '谢', '宋', '唐', '许', '韩', '冯', '邓', '曹', '彭'];
@@ -663,7 +665,7 @@ function makeDNA(seed) {
   const mund = waehle(mundTab, 'mund');
   const haar = waehle(HAAR_W, 'haar');
   let deckTab = DECKUNG_W;
-  if (HOHE_FRISUREN.has(haar)) deckTab = DECKUNG_W.filter(([id]) => id === 'keine' || id === 'hut');
+  if (HOHE_FRISUREN.has(haar)) deckTab = DECKUNG_W.filter(([id]) => id === 'keine' || id === 'hut' || (id === 'stirnband' && STIRNBAND_OK.has(haar)));
   // afro/卷发云是整球发量，帽子落位只认裸颅骨，会整个埋进发球里——直接不戴
   if (haar === 'zoepfe' || haar === 'dutt' || haar === 'afro' || haar === 'lockenwolke') deckTab = deckTab.filter(([id]) => id !== 'hut');
   const kopfbedeckung = waehle(deckTab, 'kopfbedeckung');
@@ -1243,6 +1245,13 @@ function drawZeichen(stift, ctx3d, layout, kind, seite, augenMass, pal) {
       if (a.nz < .05 || b.nz < .05) continue;
       stift.zug([{ x: a.x, y: a.y }, { x: b.x, y: b.y }], { ...opt, spur: `schraff${i}`, deckung: .36 });
     }
+    return;
+  }
+  if (kind === 'muttermal') {
+    // 泪痣：眼下到嘴角之间一颗 2-3px 墨点（feldAn 贴壳滑动；内侧落位绕开 pflaster 的颧骨外区）
+    const feld = feldAn(seite * Math.min(.6, layout.augeU * .8), layout.augeV * .35 + layout.mundV * .65, ctx3d);
+    if (feld.nz < .1) return;
+    stift.punkt({ x: feld.x, y: feld.y }, augenMass * .07, pal.tinte, { deckung: .75, spur: 'muttermal', feld });
     return;
   }
   // stirnfalten
