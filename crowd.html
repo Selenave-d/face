@@ -57,9 +57,9 @@
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
     button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-    #titel { font-size: 13px; line-height: 1.7; top: 16px; left: 16px; max-width: 54vw; white-space: normal; }
-    #zaehler { top: 96px; left: 16px; }
-    .sprung { top: 66px; left: 16px; right: auto; flex-wrap: wrap; gap: 4px 14px; font-size: 10px; letter-spacing: 1px; }
+    #titel { font-size: 13px; line-height: 1.7; top: 16px; left: 16px; max-width: 64vw; white-space: normal; }   /* 64vw+下移：320-360px 标题两行装得下，不再叠导航与计数 */
+    #zaehler { top: 118px; left: 16px; }
+    .sprung { top: 90px; left: 16px; right: auto; flex-wrap: wrap; gap: 4px 14px; font-size: 10px; letter-spacing: 1px; }
     .sprung a { padding: 2px 0; }
   }
   /* 窄桌面窗口（720~759）：导航收紧间距，别咬到不换行标题的尾巴 */
