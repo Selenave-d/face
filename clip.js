@@ -312,6 +312,9 @@ function stempel(tx, W, ax, ay, text) {
   ctx.strokeRect(-stW / 2, -stH / 2, stW, stH);
   ctx.lineWidth = 1;
   ctx.strokeRect(-stW / 2 + 3, -stH / 2 + 3, stW - 6, stH - 6);
+  ctx.globalAlpha = .06;   // 油墨不匀：内框再压一遍，斜错半像素的缺墨重影
+  ctx.strokeRect(-stW / 2 + 3.5, -stH / 2 + 2.5, stW - 6, stH - 6);
+  ctx.globalAlpha = .8;    // 文字照旧足墨
   ctx.fillStyle = STEMPEL_ROT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

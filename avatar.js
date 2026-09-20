@@ -44,6 +44,11 @@ function zeichneBuehne(t) {
     { x: b.x, y: b.y }, { x: b.x + b.s, y: b.y },
     { x: b.x + b.s, y: b.y + b.s }, { x: b.x, y: b.y + b.s },
   ], { spur: 'rahmen', geschlossen: true, w: 1.4, deckung: .8 });
+  // 内圈印框：证件照卡纸上再压一道细线（3.5px 内偏，独立噪声表——两次套印的手感）
+  uiStift.zug([
+    { x: b.x + 3.5, y: b.y + 3.5 }, { x: b.x + b.s - 3.5, y: b.y + 3.5 },
+    { x: b.x + b.s - 3.5, y: b.y + b.s - 3.5 }, { x: b.x + 3.5, y: b.y + b.s - 3.5 },
+  ], { spur: 'rahmen2', geschlossen: true, w: 1, deckung: .35 });
   // 四角裁切线：一张待裁切的证件照底片（导出走 avatarPNG，不带这些印刷标记）
   const cm = 4, cl = 11;   // 外偏与线长都收在舞台两侧 ≥16px 的余量内
   [[b.x, b.y, 1, 1], [b.x + b.s, b.y, -1, 1], [b.x, b.y + b.s, 1, -1], [b.x + b.s, b.y + b.s, -1, -1]]
@@ -53,6 +58,14 @@ function zeichneBuehne(t) {
       uiStift.zug([{ x: ex - sx * cm, y: ey - sy * cm }, { x: ex - sx * cm, y: ey - sy * (cm + cl) }],
         { spur: `beschnitt-v${i}`, w: 1, deckung: .5, eckig: true });
     });
+  // 档案号小注：舞台下居中一枚灰字——拍立得日期角标同族的印刷语言（导出 avatarPNG 不带）
+  ctx.save();
+  ctx.fillStyle = '#a89f93';
+  ctx.font = '10px "Courier New", ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`№ ${saat % 10000}`, b.x + b.s / 2, b.y + b.s + 4);
+  ctx.restore();
   // 胸像：与一墙脸同一套裁切（带肩块），按帽子/发量自适应缩放
   const bedarf = raumBedarf(kopf);
   kopf.mass = b.s / (bedarf.oben + 2.25);
@@ -164,7 +177,8 @@ function gesichtAktion(art) {
 function gesichtTick(t) {
   const qt = Math.floor(t * 12) / 12;
   if (t < (einmal.sprichBis || 0)) kopf.plappertBis = qt + .12;
-  if (einmal.blinzPlan && einmal.blinzPlan.length && qt >= einmal.blinzPlan[0] - .02) {
+  // while 而非 if：后台标签页恢复时过期项一轮清空，只眨一次（if 会拖出连续三帧闭眼）
+  while (einmal.blinzPlan && einmal.blinzPlan.length && qt >= einmal.blinzPlan[0] - .02) {
     kopf.blinzeltBis = qt + .14;
     einmal.blinzPlan.shift();
   }
@@ -232,10 +246,11 @@ function gesichtKnopfe() {
 }
 
 // 调试钩子：无头验证用（每帧刷新的纯状态对象，读取无副作用）
-window.__avatar = { saat: 0, yaw: 0, wach: 1, plappertBis: 0, blinzeltBis: 0, gesicht: '' };
+window.__avatar = { saat: 0, yaw: 0, wach: 1, plappertBis: 0, blinzeltBis: 0, gesicht: '', blick: 0 };
 function hookSync() {
   const h = window.__avatar;
   h.saat = saat; h.yaw = kopf.yaw; h.wach = kopf.wach;
   h.plappertBis = kopf.plappertBis; h.blinzeltBis = kopf.blinzeltBis;
   h.gesicht = gesichtForm || '';
+  h.blick = blickZiel ? blickZiel.x : 0;   // 视线锁定态：左 -.55 / 右 +.55 / 中 0（无头验证用）
 }
