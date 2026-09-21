@@ -1407,11 +1407,14 @@ function drawZierrat(stift, ctx3d, dna, kind, ohrFelder, seite, pal) {
 
 function machAnsatzklemme(dna) {
   const r = strom(dna.seed, 'ansatzklemme').n();
-  const n = dna.layout.braueV + .15;
+  const braueV = dna.layout.braueV;
+  const n = braueV + .15;
   const basis = n - (n - (dna.layout.augeV - dna.layout.zonen.augeL.halbV)) * r;
   return (u) => {
     const t = clamp((Math.abs(u) - .8) / .32, 0, 1);
-    return basis - .62 * t * t * (3 - 2 * t);
+    // 颞部加一道眉线上缘的绝对下限：宽眼距（augeU 可达 .8）时眉尾 u 能落到 ~1.03，
+    // 颞部下垂 .5 幅度会把发壳填色压到眉线之下、埋掉眉梢——最多贴到眉线上缘
+    return Math.max(basis - .62 * t * t * (3 - 2 * t), braueV - .05 * t);
   };
 }
 
@@ -2972,13 +2975,8 @@ function papierAuf(c, w, h) {
   }
 }
 
-function papier() {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  papierAuf(ctx, innerWidth, innerHeight);
-}
-
-/* 先画再拓：photo/crowd 每帧整屏铺纸是 2~10ms 的大头，离屏画一次记住逐帧贴回；
- * 尺寸/dpr 变了才重画。贴回后恢复 dpr 变换——后续绘制仍按 CSS 像素坐标走。 */
+// 先画再拓：每帧整屏铺纸是 2~10ms 的大头，离屏画一次记住逐帧贴回；
+// 尺寸/dpr 变了才重画。贴回后恢复 dpr 变换——后续绘制仍按 CSS 像素坐标走。
 let papierMemo = null;
 function papierSchnell() {
   const w = Math.ceil(innerWidth), h = Math.ceil(innerHeight);
@@ -3187,7 +3185,7 @@ if (WAND) addEventListener('keydown', (e) => {
   heads[vergroessert].gesicht = g ? GESICHT_FORMEN[g] : null;
 });
 
-// foto / crowd 模式到这里为止：纸纹与 papier() 留用，排版与主循环交给 photo.js / crowd.js
+// foto / crowd 模式到这里为止：纸纹与 papierSchnell() 留用，排版与主循环交给 photo.js / crowd.js
 if (FOTO || CROWD || CLIP || AVATAR) {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   makeGrain();
@@ -3274,7 +3272,7 @@ function frame(now) {
   const t = (typeof window !== 'undefined' && window.__freezeT != null) ? window.__freezeT : now / 1000;
   if (wechselT < 0 && !WAND) wechselT = t;   // 首屏弹入从首帧起算（仅单人页）：加载再慢也吃得到 0.25s 窗口
 
-  papier();
+  papierSchnell();
   if (!WAND) bodenZeichnen(t, heads[0]);
   const zuZeichnen = (WAND && vergroessert >= 0) ? [heads[vergroessert]] : heads;
   // 悬停反馈：最贴指针的那颗（个）头 3% 缓放 + 光标变 pointer——"这是可以点的"终于看得见；

@@ -64,7 +64,7 @@ function zeichneBuehne(t) {
   ctx.font = '10px "Courier New", ui-monospace, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText(`№ ${saat % 10000}`, b.x + b.s / 2, b.y + b.s + 4);
+  ctx.fillText(`№ ${String(saat % 10000).padStart(4, '0')}`, b.x + b.s / 2, b.y + b.s + 4);   // 补零到四位：卡纸语言里编号宽度不随种子跳变
   ctx.restore();
   // 胸像：与一墙脸同一套裁切（带肩块），按帽子/发量自适应缩放
   const bedarf = raumBedarf(kopf);

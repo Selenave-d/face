@@ -4,7 +4,7 @@
  * 报头 + 日期栏 + 通栏标题 + 手绘胸像（app.js 引擎，带肩块的胸像裁切）
  * + 双栏铅字假文 + 悬赏行 + 朱红印章 + 折痕 + 撕纸边。
  * ?seed=N 同种子同剪报；「存图片」导出 PNG（纯 canvas，零依赖）。
- * 角色由 app.js 的 Head/drawHead 提供；纸面/纸纹用 papier()；线条全程 8fps 沸腾。
+ * 角色由 app.js 的 Head/drawHead 提供；纸面/纸纹用 papierSchnell() 离屏拓印；线条全程 8fps 沸腾。
  */
 'use strict';
 

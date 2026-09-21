@@ -723,7 +723,7 @@ function zeichneMuzzle(stift, rec, k, face = 'ruhig') {
   }
 }
 
-/* 头顶：苗/光环/闪电/花/垂耳/熊耳/猫耳/角/长耳 */
+/* 头顶：苗/闪电/花/垂耳/熊耳/猫耳/角/长耳（光环不在此——它是悬浮物，见 zeichneHalo） */
 function zeichneCrest(stift, rec, k, kopf) {
   const c = rec.crest;
   if (c.style === 'none') return;
@@ -740,9 +740,6 @@ function zeichneCrest(stift, rec, k, kopf) {
       stift.line(bogenPts(-.05 * k * len, topY - .13 * k * len, .05 * k * len, .03 * k * len, .5, 3.6, 6), 1.3, { label: 92 });
       break;
     }
-    case 'halo':
-      stift.line(kreisPts(0, topY - .12 * k * len, R * .45, R * .45 * .3, 18, .03, rec.seed + 5), 1.5, { closed: true, label: 93 });
-      break;
     case 'bolt': {
       const b = .08 * k * len;
       stift.line([[0, topY - .02 * k], [b * .8, topY - b], [b * .2, topY - b * 1.1], [b, topY - b * 2.2], [0, topY - b * 1.2], [b * .55, topY - b * 1.1]], 1.3, { label: 94 });
@@ -824,6 +821,14 @@ function zeichneCrest(stift, rec, k, kopf) {
       }
       break;
   }
+}
+
+/* 光环：悬浮在头顶上方的椭圆环——画在发型之后，发包不再盖住环的下缘 */
+function zeichneHalo(stift, rec, k, kopf) {
+  let topY = 1e9;
+  for (const p of kopf) topY = Math.min(topY, p[1]);
+  const R = .44 * rec.skull.s * k;
+  stift.line(kreisPts(0, topY - .12 * k * rec.crest.len, R * .45, R * .45 * .3, 18, .03, rec.seed + 5), 1.5, { closed: true, label: 93 });
 }
 
 /* 发型：秃/bob/乱/刺/碗/卷/板寸/爆炸/双辫/长/丸子/冲天/莫西干/翘毛 */
@@ -1131,9 +1136,11 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   stift.haut(kopf, rec.skull.dark, { k });
   stift.line(kopf, 1.6, { closed: true, label: 15, jitter: .6 });
 
-  // 头顶与发型
+  // 头顶与发型：芽/闪电/花的根扎在头皮，发包可以压过根部（像从发里长出来）
   zeichneCrest(stift, rec, k, kopf);
   zeichneHair(stift, rec, k, kopf);
+  // 光环画在发型之后：悬浮物不吃层序，topknot/afro 不再盖住环的下缘
+  if (rec.crest.style === 'halo') zeichneHalo(stift, rec, k, kopf);
   // 墨块斑点：在五官之前落墨（可以糊在头发身上，不盖眼睛）
   zeichneFlecken(stift, rec, k);
 
