@@ -230,11 +230,15 @@ function zeichneBlatt(t) {
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(W * .088)}px "Courier New", ui-monospace, monospace`;
   try { ctx.letterSpacing = `${Math.round(W * .012)}px`; } catch (e) { /* 旧浏览器忽略 */ }
-  ctx.fillText(tx.blatt, P + W / 2, Q + p + W * .05);
+  const dK = druckZeile('kopf', 0);
+  ctx.globalAlpha = dK.a;
+  ctx.fillText(tx.blatt, P + W / 2, Q + p + W * .05 + dK.dy);
   ctx.font = `${Math.round(W * .03)}px "Courier New", monospace`;
   ctx.fillStyle = '#7a7268';
   try { ctx.letterSpacing = '1px'; } catch (e) { /* 旧浏览器忽略 */ }
-  ctx.fillText(`${tx.datum} · ${tx.ausgabe} · 本报通讯员 手绘`, P + W / 2, Q + p + W * .105, W - 2 * p);   // 第四参兜底：最坏种子+320 屏不溢出版心
+  const dD = druckZeile('datum', 0);
+  ctx.globalAlpha = dD.a;
+  ctx.fillText(`${tx.datum} · ${tx.ausgabe} · 本报通讯员 手绘`, P + W / 2, Q + p + W * .105 + dD.dy, W - 2 * p);   // 第四参兜底：最坏种子+320 屏不溢出版心
   ctx.restore();
   // 报头下的双细线
   s.zug([{ x: P + p, y: Q + p + W * .14 }, { x: P + W - p, y: Q + p + W * .14 }], { spur: 'linie-a', w: 1.3, deckung: .8, eckig: true });
@@ -250,6 +254,23 @@ function zeichneBlatt(t) {
 
 /* —— 两种版式共用的三件套：双栏铅字 / 折痕 / 印章，只是落点不同 —— */
 
+// 每行墨压：基线 ±0.4px、alpha .9~.97（铅字压不匀）。行号编进标签而非按序消费——
+// 行数随窗口高变（spalten 的 passt），独立小流让每行的抖动永远属于那一行；
+// 只挂 saat 不挂 tick：同种子恒定，不随 8fps 笔沸腾跳动
+function druckZeile(label, i) {
+  const r = strom(saat, label + i);
+  return { dy: r.range(-.4, .4), a: r.range(.9, .97) };
+}
+
+// 通栏标题的套印重影：主遍足墨，第二遍只错 X .35~.7px（走纸方向的平移）——
+// Y 错位会读成拖影而非套印；透明度 .08~.13 在缺墨家族里补印章 .06 与黄晕 .14 之间的档
+function titelDruck(text, x, y) {
+  const dr = strom(saat, 'titelDruck');
+  ctx.fillText(text, x, y);
+  ctx.globalAlpha = .08 + dr.n() * .05;
+  ctx.fillText(text, x + (dr.n() < .5 ? -1 : 1) * (.35 + dr.n() * .35), y);
+}
+
 function spalten(s, tx, P, Q, W, H, p, spaltenY) {
   // 双栏铅字：栏间一道细线，行距松，铅灰色
   const spaltenH = Q + H - p * 1.2 - spaltenY;
@@ -263,7 +284,9 @@ function spalten(s, tx, P, Q, W, H, p, spaltenY) {
   ctx.textBaseline = 'top';
   for (let i = 0; i < passt; i++) {
     const spalte = i % 2, zeile = Math.floor(i / 2);
-    ctx.fillText(tx.zeilen[i % tx.zeilen.length], P + p + spalte * (spW + gut), spaltenY + zeile * zeilenH, spW);
+    const d = druckZeile('zeile', i);
+    ctx.globalAlpha = d.a;
+    ctx.fillText(tx.zeilen[i % tx.zeilen.length], P + p + spalte * (spW + gut), spaltenY + zeile * zeilenH + d.dy, spW);
   }
   ctx.restore();
   s.zug([
@@ -332,7 +355,7 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(W * .062)}px "Courier New", ui-monospace, monospace`;
-  ctx.fillText(tx.titel, P + W / 2, Q + p + W * .21);
+  titelDruck(tx.titel, P + W / 2, Q + p + W * .21);
   ctx.restore();
 
   // 肖像框：胸像居中（同一套 Head，带肩块），框是手绘细线
@@ -362,7 +385,9 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
   ctx.fillText(`图：${tx.name}（本报通讯员手绘）`, P + W / 2, boxY + boxH + W * .035);
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(W * .038)}px "Courier New", monospace`;
-  ctx.fillText(tx.lohn, P + W / 2, boxY + boxH + W * .09);
+  const dL = druckZeile('lohn', 0);   // 三版式互斥，共用一条 lohn 流
+  ctx.globalAlpha = dL.a;
+  ctx.fillText(tx.lohn, P + W / 2, boxY + boxH + W * .09 + dL.dy);
   ctx.restore();
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .13);
@@ -379,7 +404,7 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(Math.min(W * .07, W * .55 / tx.duoTitel.length))}px "Courier New", ui-monospace, monospace`;
-  ctx.fillText(tx.duoTitel, P + W / 2, Q + p + W * .21);
+  titelDruck(tx.duoTitel, P + W / 2, Q + p + W * .21);
   ctx.restore();
 
   // 并排两帧肖像：两框加一道中缝严格居中
@@ -426,7 +451,9 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
   ctx.fillText(`图右：${tx.name2}（读者供图）`, x2 + boxW / 2, rahmenY + boxH + W * .033);
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(W * .038)}px "Courier New", monospace`;
-  ctx.fillText(tx.duoLohn, P + W / 2, rahmenY + boxH + W * .075);
+  const dL = druckZeile('lohn', 0);   // 与寻人版共用 lohn 流：版式互斥，同种子同脾气
+  ctx.globalAlpha = dL.a;
+  ctx.fillText(tx.duoLohn, P + W / 2, rahmenY + boxH + W * .075 + dL.dy);
   ctx.restore();
 
   spalten(s, tx, P, Q, W, H, p, rahmenY + boxH + W * .115);
@@ -443,7 +470,7 @@ function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(Math.min(W * .062, W * .6 / tx.verlorenTitel.length))}px "Courier New", ui-monospace, monospace`;
-  ctx.fillText(tx.verlorenTitel, P + W / 2, Q + p + W * .21);
+  titelDruck(tx.verlorenTitel, P + W / 2, Q + p + W * .21);
   ctx.restore();
 
   // 左上小肖像：虚线框里的"失物缩略照"（证件照式满框）
@@ -468,9 +495,15 @@ function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
   ctx.textBaseline = 'top';
   ctx.font = `${Math.round(W * .03)}px "Kaiti", "STKaiti", "楷体", serif`;
   ctx.fillStyle = '#2e2839';
-  tx.merkmale.forEach((m, i) => ctx.fillText(`· ${m}`, rx, ry + i * W * .052, W * .515));
+  tx.merkmale.forEach((m, i) => {
+    const d = druckZeile('merkmal', i);
+    ctx.globalAlpha = d.a;
+    ctx.fillText(`· ${m}`, rx, ry + i * W * .052 + d.dy, W * .515);
+  });
   ctx.font = `bold ${Math.round(W * .03)}px "Courier New", monospace`;
-  ctx.fillText(`最后目击：${tx.ort}`, rx, ry + 3 * W * .052, W * .515);
+  const dO = druckZeile('ort', 0);
+  ctx.globalAlpha = dO.a;
+  ctx.fillText(`最后目击：${tx.ort}`, rx, ry + 3 * W * .052 + dO.dy, W * .515);
   ctx.restore();
 
   // 框下图注 + 通栏酬谢行
@@ -482,7 +515,9 @@ function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
   ctx.fillText(`图：${tx.name}（近似）`, boxX + boxW / 2, boxY + boxH + W * .032, boxW);
   ctx.fillStyle = '#2e2839';
   ctx.font = `bold ${Math.round(W * .038)}px "Courier New", monospace`;
-  ctx.fillText(tx.verlorenLohn, P + W / 2, boxY + boxH + W * .075);
+  const dL = druckZeile('lohn', 0);
+  ctx.globalAlpha = dL.a;
+  ctx.fillText(tx.verlorenLohn, P + W / 2, boxY + boxH + W * .075 + dL.dy);
   ctx.restore();
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .115);

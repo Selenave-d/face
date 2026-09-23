@@ -16,7 +16,7 @@ const REIHEN_ZAHL = {
   schmal: [7, 7, 6, 6, 4, 4],     // 窄屏：34 人
 };
 const BODEN_RAUM = 158;    // 底部给滑块留的地
-const TITEL_RAUM = 140;    // 顶部给标题+导航行留的天
+const TITEL_RAUM = 150;    // 顶部给标题+导航行留的天——150：容下 #zaehler 计数带（top118+行高+2.5°旋转底缘约 140）再留最坏后排深度抖动的 2-3px
 
 let saat = 91;             // 人群种子（换一群时重掷）
 let leute = [];            // Head 实例，下标 = 站位（绘制顺序：后→前）
