@@ -482,11 +482,11 @@ function zeichneBrauen(stift, rec, k, face) {
   const ey = Math.max(yCut + .04 * k, -.98 * k - .13 * k * rec.eyes.scale);
   for (const s of [-1, 1]) {
     if (face === 'boese') {
-      // 外高内低，压向眼睛
-      stift.line([[s * (ex + .09 * k), ey - .04 * k], [s * (ex - .06 * k), ey + .02 * k]], 1.6, { label: 200 + s });
+      // 外高内低，压向眼睛（标签 210 段：200/202 段与魇的额眼 201/202 撞号会抖动同步）
+      stift.line([[s * (ex + .09 * k), ey - .04 * k], [s * (ex - .06 * k), ey + .02 * k]], 1.6, { label: 210 + s });
     } else {
       // 内高外低的八字
-      stift.line([[s * (ex - .07 * k), ey - .05 * k], [s * (ex + .08 * k), ey + .01 * k]], 1.3, { label: 202 + s, alpha: .8 });
+      stift.line([[s * (ex - .07 * k), ey - .05 * k], [s * (ex + .08 * k), ey + .01 * k]], 1.3, { label: 212 + s, alpha: .8 });
     }
   }
 }
@@ -979,7 +979,7 @@ function zeichneSchwanz(stift, rec, k, wag) {
     const pts = [];
     for (let i = 0; i <= 14; i++) {
       const tt = i / 14, a = tt * TAU2 * 1.6;
-      pts.push([bx + .08 * k + Math.cos(a) * .13 * k * tt, by + Math.sin(a) * .13 * k * tt]);
+      pts.push([bx + Math.cos(a) * .13 * k * tt, by + Math.sin(a) * .13 * k * tt]);   // 根就在 bx：再加 .08k 会越过躯干半宽 .26k 悬空
     }
     stift.line(pts, 1.4, { label: 142 });
   } else {

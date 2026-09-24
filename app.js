@@ -3027,6 +3027,49 @@ function raumBedarf(head) {
   return { oben, seite, unten: bustenBoden(dna) };
 }
 
+/* ================= 一墙脸·头部精灵缓存 =================
+ * 照 crowd.js kopfSprite 的骨架：12 颗头 × 60fps 的全量 drawHead（颅骨点云投影 + 全部笔画）
+ * 压成 miss 时才算，其余帧 drawImage。差异三处：
+ *   · key 无 akName/namenAn——墙模式无动作（update 只在 !WAND 掷），名字移出精灵单独画；
+ *   · 画布只裹胸像（墙不画身体），sdpr 进 key 兜住 dpr 变化（crowd 的键漏了这节）；
+ *   · 眨眼/嘟囔期间换帧升到 24fps，平时 12fps——翻书感与 crowd 一致。
+ * 关键正确性：笔（stift）闭包绑着创建它的 ctx，离屏渲染前必须废弃旧笔。 */
+function kopfSpriteWand(head, t) {
+  const schnell = (head.blinzeltBis > t || head.plappertBis > t) ? 2 : 1;
+  // 每人固定随机相位（<1/12s）：12 颗头的换帧时刻摊进整帧，不是同一帧全员重画
+  if (head.spritePhase === undefined) head.spritePhase = strom(head.dna.seed, 'spritePhase').n() / 12;
+  const sdpr = Math.min(dpr, 1.75);   // 12 张 ~213×278 CSS px × 1.75² ≈ 9MB 显存，可控
+  const key = `${Math.floor((t + head.spritePhase) * 12 * schnell)}|${Math.round(head.mass * 10)}|${sdpr}`;
+  const bedarf = raumBedarf(head);
+  let sp = head.sprite;
+  if (sp && sp.key === key) {
+    // 命中也要钉锚点：mass 量化后 resize 常不触发重画，但 head.cy 跟窗口高变了
+    sp.topY = head.cy - (bedarf.oben + .15) * head.mass;
+    return sp;
+  }
+  const mass = head.mass;
+  // 画布只裹胸像：横 = 两侧 seite 各加 .2 余量；竖 = 头顶 oben+.15 到胸像肩底（bedarf.unten）+.15
+  const W = mass * (2 * bedarf.seite + .4);
+  const H = mass * (bedarf.oben + .3 + bedarf.unten);
+  if (!sp) sp = head.sprite = { cv: document.createElement('canvas') };
+  sp.key = key;
+  sp.w = W; sp.h = H;
+  sp.topY = head.cy - (bedarf.oben + .15) * mass;
+  const pw = Math.max(1, Math.ceil(W * sdpr)), ph = Math.max(1, Math.ceil(H * sdpr));
+  if (sp.cv.width !== pw || sp.cv.height !== ph) { sp.cv.width = pw; sp.cv.height = ph; }
+  const cc = sp.cv.getContext('2d');
+  cc.setTransform(sdpr, 0, 0, sdpr, 0, 0);
+  cc.clearRect(0, 0, W, H);
+  head.cache.stift = null; head.cache.stiftCtx = null; head.cache.stiftTick = -1; head.cache.stiftMass = -1;
+  const proxy = Object.create(head);   // 只喂给 drawHead，绝不进 update()。
+  // 安全前提：drawHead 对 head 只读（无 head.xxx 赋值），代理拦截 cx/cy/zeigeName 的写只落 proxy
+  proxy.cx = W / 2;
+  proxy.cy = head.cy - sp.topY;
+  proxy.zeigeName = false;             // 名字是屏幕绝对坐标的 13px 定字号，画在精灵外保清晰
+  drawHead(cc, proxy, t);
+  return sp;
+}
+
 function layout() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(innerWidth * dpr);
@@ -3060,6 +3103,8 @@ function layout() {
     const count = cols * rows;
     while (heads.length < count) heads.push(new Head(baseSeed + heads.length));
     heads.length = count;
+    // 放大态下窗口缩档把截断线压到放大索引之下时，放大目标已不存在——退回整墙
+    if (vergroessert >= count) vergroessert = -1;
     const gw = innerWidth / cols;
     const kopfBand = innerWidth < 720 ? 104 : 88;   // 标题带（桌面：标题底 66；手机：导航行底约 89）
     const gh = Math.max(1, innerHeight - kopfBand) / rows;   // 下限 1 防极矮视口负高度，不虚构空间
@@ -3069,6 +3114,10 @@ function layout() {
       const c = i % cols, r = Math.floor(i / cols);
       const bedarf = raumBedarf(head);
       head.mass = Math.min(gw / (2 * bedarf.seite * 1.06), gh / (bedarf.oben + 2.1));
+      // ~2% 量化、步长取 2 的幂（网格锚在绝对刻度）：同档窗口尺寸算出同一 mass，resize 不再
+      // 全员重画精灵；向下取整只会更小，不会重新突破格子硬上限；步长取 mass*.02 本身是恒等没量化
+      const stufe = Math.max(.2, Math.pow(2, Math.round(Math.log2(head.mass * .02))));
+      head.mass = Math.max(stufe, Math.floor(head.mass / stufe) * stufe);   // 下限防极矮窗 mass<stufe 时量化归零
       head.cx = gw * (c + .5);
       head.cy = kopfBand + gh * r + head.mass * bedarf.oben + (r === 0 ? 0 : gh * .08);
       head.nameY = head.cy + head.mass * Math.max(1.62, bedarf.unten + .1);   // 高颅骨按实际肩底再往下让
@@ -3295,15 +3344,35 @@ function frame(now) {
     const wk = .85 + .15 * wE + .12 * Math.sin(wE * Math.PI);   // 换人落定：85% 起步、约 5% 过冲，transform 不碰 mass
     const k = (1 + .03 * head.hoverA) * wk;
     head.zeigK = k;   // 记给命中反算用：画面缩放多少，命中区就是多少
+    // 整墙走精灵贴图（12fps 换帧 + 相位摊开，miss 才重画）；放大态仍 drawHead 直绘——
+    // 放大的 mass 与点击表情都不进精灵键，绕过即天然失效
+    const inhaltZeichnen = () => {
+      if (WAND && vergroessert < 0) {
+        const sp = kopfSpriteWand(head, t);
+        ctx.drawImage(sp.cv, head.cx - sp.w / 2, sp.topY, sp.w, sp.h);
+        // 名字补画（drawHead 内那段被 zeigeName=false 关掉了）：13px 定字号画在主 ctx 保清晰，
+        // 落在同一坐标系里——hover 缓放时与头一起缩，和直绘时代逐像素一致
+        ctx.save();
+        ctx.font = `13px "Kaiti", "STKaiti", "楷体", serif`;
+        try { ctx.letterSpacing = '2px'; } catch (e) { /* 旧浏览器忽略 */ }
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#8b8894';
+        ctx.fillText(head.dna.name, head.cx, head.nameY ?? (head.cy + head.mass * 1.62));
+        ctx.restore();
+      } else {
+        drawHead(ctx, head, t);
+      }
+    };
     if (k > 1.0005 || k < .9995) {
       ctx.save();
       ctx.translate(head.cx, head.nameY);   // 锚在脚边：头从肩膀处微微"站起来朝向你"
       ctx.scale(k, k);
       ctx.translate(-head.cx, -head.nameY);
-      drawHead(ctx, head, t);
+      inhaltZeichnen();
       ctx.restore();
     } else {
-      drawHead(ctx, head, t);
+      inhaltZeichnen();
     }
   });
   if (WAND && window.__wand) {

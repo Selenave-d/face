@@ -330,6 +330,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const i = FOLGE.indexOf(kind.face);
     kind.face = FOLGE[(i >= 0 ? i + 1 : 1) % FOLGE.length];
     kind.hopT = performance.now() / 1000;  // 换表情小跳一下：输入要有即时可见反馈
+    kind.seit = kind.hopT;                 // 「怕 2 秒」重新计时——换到怕不会下一帧就被入场逻辑弹回平静
     kind.hopAmp = .2;
   }, 400);
 });
