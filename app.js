@@ -776,9 +776,12 @@ class Head {
     if (typeof syncAktionsUI === 'function') syncAktionsUI(name);
   }
 
-  // 当前帧的姿态：动作相位按 12fps 量化（翻页书），过渡插值用真实时间
+  // 当前帧的姿态：动作相位按 12fps 量化（翻页书），过渡插值用真实时间。
+  // 相位锚在 akSeit（动作起点，构造器置 0、setAktion 每次更新——两处前提，勿改默认值）而非墙钟：
+  // 点「跳跃」从下蹲起手、庆祝按自然周期收尾，不再从随机相位半空进场；
+  // akSeit=0 的页面（一墙脸无动作）与墙钟逐帧等价
   motionPose(t) {
-    const qt = Math.floor(t * 12) / 12;
+    const qt = Math.floor((t - this.akSeit) * 12) / 12;
     let p = AKTIONEN[this.akName].pose(qt, this.dna);
     if (this.akVon) {
       const f = smooth((t - this.akSeit) / .25);
@@ -3271,10 +3274,10 @@ function bodenZeichnen(t, head) {
   // 落地溅墨：land 相在脚边洒三粒墨点加两道短排线——落地有声。落地序号编进笔标签：
   // 同一次落地内稳定（punkt 噪声与 tick 无关），下一跳重掷。相位门控排除下蹲相（它的 dy 也会 >.05）
   if (head.akName === 'jump') {
-    const ph = (((t / 1.7) % 1) + 1) % 1;
+    const ph = ((((t - head.akSeit) / 1.7) % 1) + 1) % 1;
     const land = ph >= .78 ? Math.sin((ph - .78) / .22 * Math.PI) : 0;
     if (land > .25 && pose.dy > .05) {
-      const nr = Math.floor(t / 1.7);
+      const nr = Math.floor((t - head.akSeit) / 1.7);
       for (let i = 0; i < 3; i++) {
         const dir = i - 1;
         bodenStiftEinz.punkt(

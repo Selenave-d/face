@@ -136,6 +136,7 @@ function blattGeometrie() {
 
 let uiStift = null, uiTick = -1;
 let txMemo = { seed: -1, tx: null };          // 文案按种子记忆：不每帧重掷
+let blattMemo = null;   // 整页记忆：{ cv, key, bx, by, bw, bh }——bx/by 为设备像素（miss 帧从主画布 1:1 截取）
 let rissMemo = { key: '', pts: null };        // 撕纸边多边形同理（只随种子与尺寸变）
 let fleckMemo = { saat: -1, list: null };     // 陈年锈斑同理（只随种子变；位置存纸面分数，resize 重投影）
 
@@ -530,6 +531,23 @@ function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
 let vorige = 0;
 let wechselZeit = -9;   // 上次「换一张」的时刻：新剪报 0.3s 从 94% 落定（纸是物，幅度比人小）；
                         // 别叫 wechselT——app.js 顶层已占用，classic script 共享词法域重名即整页炸
+/* 整页记忆截取：miss 帧画完 zeichneBlatt 后，把剪报区域从主画布设备像素 1:1 抄进离屏——
+ * pad 盖住撕边振幅（W*.022）+ 投影偏移 + 换纸过冲 2%；烘焙恒在无缩放下取样（带 wk 烘进去会二次缩放） */
+function erfasseBlatt(key, g) {
+  const pad = Math.ceil(g.w * .03) + 8, seit = Math.ceil(g.w * .025);
+  const bx = Math.max(0, Math.round((g.x - pad) * dpr));
+  const by = Math.max(0, Math.round((g.y - pad) * dpr));
+  const bw = Math.min(canvas.width - bx, Math.round((g.w + pad * 2 + seit) * dpr));
+  const bh = Math.min(canvas.height - by, Math.round((g.h + pad * 2 + seit) * dpr));
+  const m = blattMemo && blattMemo.cv ? blattMemo : (blattMemo = { cv: document.createElement('canvas') });
+  if (m.cv.width !== bw || m.cv.height !== bh) { m.cv.width = bw; m.cv.height = bh; }
+  const cc = m.cv.getContext('2d');
+  cc.setTransform(1, 0, 0, 1, 0, 0);
+  cc.clearRect(0, 0, bw, bh);
+  cc.drawImage(canvas, bx, by, bw, bh, 0, 0, bw, bh);
+  return { cv: m.cv, key, bx, by, bw, bh };
+}
+
 function rahmen(now) {
   const t = now / 1000;
   const dt = vorige ? Math.min(t - vorige, .05) : .016;
@@ -539,16 +557,28 @@ function rahmen(now) {
   kopf.update(dt, t, pointer);
   kopf2.update(dt, t, TOTER_ZEIGER);
   papierSchnell();   // 底纹离屏拓印（photo/crowd 同款）：三遍全屏 fill 换一张 drawImage
-  const wE = Math.min(1, Math.max(0, (t - wechselZeit) / .3));
-  if (wE >= 1) { zeichneBlatt(t); requestAnimationFrame(rahmen); return; }
-  const wk = .94 + .06 * wE + .05 * Math.sin(Math.PI * wE);   // wE=0→.94，中途≈1.02 过冲，wE=1→恰 1
+  // 整页按笔沸腾节律记忆：内容只在 tick8 或胸像微动画处变，miss 才全画、其余帧整张贴回；
+  // 眨眼/嘟囔窗口（.14s / 1.2-3s）内换帧翻倍到 16fps——纯 8fps 会把眨眼采成「瞪一眼」；
+  // 键带 schnell 后缀：降档瞬间 floor(t*8) 会撞升档期 floor(t*16) 的偶数值，吃掉一帧旧图
   const g = blattGeometrie();
+  const geo = `${Math.round(g.x)}|${Math.round(g.y)}|${Math.round(g.w)}|${Math.round(g.h)}|${dpr}`;
+  const schnell = (kopf.blinzeltBis > t || kopf.plappertBis > t
+    || kopf2.blinzeltBis > t || kopf2.plappertBis > t) ? 2 : 1;
+  const key = `${Math.floor(t * 8 * schnell)}|${schnell}|${saat}|${geo}`;
+  const wE = Math.min(1, Math.max(0, (t - wechselZeit) / .3));
+  if (!blattMemo || blattMemo.key !== key) {
+    zeichneBlatt(t);   // 恒 1 倍画在主画布（不带换纸缩放）
+    blattMemo = erfasseBlatt(key, g);
+    if (wE >= 1) { requestAnimationFrame(rahmen); return; }   // 稳定态：主画布已是成品，下帧起整张贴回
+    papierSchnell();   // 过场：盖掉无缩放底稿，再贴缩放图
+  }
+  const wk = .94 + .06 * wE + .05 * Math.sin(Math.PI * wE);   // wE=0→.94，中途≈1.02 过冲，wE=1→恰 1
   const mx = g.x + g.w / 2, my = g.y + g.h / 2;   // 锚纸中心：整张纸一起落，页底纸纹不动
   ctx.save();
   ctx.translate(mx, my);
   ctx.scale(wk, wk);
   ctx.translate(-mx, -my);
-  zeichneBlatt(t);
+  ctx.drawImage(blattMemo.cv, blattMemo.bx / dpr, blattMemo.by / dpr, blattMemo.bw / dpr, blattMemo.bh / dpr);
   ctx.restore();
   requestAnimationFrame(rahmen);
 }
