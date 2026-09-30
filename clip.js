@@ -136,7 +136,7 @@ function blattGeometrie() {
 
 let uiStift = null, uiTick = -1;
 let txMemo = { seed: -1, tx: null };          // 文案按种子记忆：不每帧重掷
-let blattMemo = null;   // 整页记忆：{ cv, key, bx, by, bw, bh }——bx/by 为设备像素（miss 帧从主画布 1:1 截取）
+let blattMemo = null;   // 整页记忆：{ cv, key, bx, by, bw, bh }——bx/by 为该记忆区在主画布设备像素坐标里的左上角，bw/bh 为 memo 的设备像素尺寸（miss 帧从主画布 1:1 截取，存图导出按同一坐标系换算）
 let rissMemo = { key: '', pts: null };        // 撕纸边多边形同理（只随种子与尺寸变）
 let fleckMemo = { saat: -1, list: null };     // 陈年锈斑同理（只随种子变；位置存纸面分数，resize 重投影）
 
@@ -601,16 +601,23 @@ document.getElementById('neues').addEventListener('click', () => {
   try { history.replaceState(null, '', '?seed=' + saat); } catch (e) { /* file:// 可能拒绝 */ }
 });
 
-// 存图片：把剪报区域从主画布裁出导出 PNG（零依赖）；四周外扩一点，撕纸边完整入图
+// 存图片：从整页记忆（blattMemo 永远是无缩放 1:1 成品）裁出导出 PNG（零依赖）；
+// 四周外扩一点，撕纸边完整入图——直接读主画布的话，换纸过场 0.3s 内点存图会得到缩放中的纸
 document.getElementById('speicher').addEventListener('click', () => {
+  if (!blattMemo) return;
   const g = blattGeometrie();
   const ex = Math.max(0, g.x - g.w * .035), ey = Math.max(0, g.y - g.w * .035);
   const ew = Math.min(innerWidth - ex, g.w * 1.07), eh = Math.min(innerHeight - ey, g.h + g.w * .07);
+  // 主画布坐标 → memo 设备像素坐标换算；小视口下 memo 可能被裁窄，源区按实际取；
+  // 输出 = 源 × (2/dpr)：全 dpr 下恒为 CSS 尺寸 ×2（与旧口径一致），源被裁窄时输出同比收窄、不拉伸
+  const m = blattMemo;
+  const sx = Math.max(0, ex * dpr - m.bx), sy = Math.max(0, ey * dpr - m.by);
+  const sw = Math.max(1, Math.min(ew * dpr, m.bw - sx)), sh = Math.max(1, Math.min(eh * dpr, m.bh - sy));
   const out = document.createElement('canvas');
-  out.width = Math.round(ew * 2);
-  out.height = Math.round(eh * 2);
+  out.width = Math.round(sw * 2 / dpr);
+  out.height = Math.round(sh * 2 / dpr);
   const oc = out.getContext('2d');
-  oc.drawImage(canvas, ex * dpr, ey * dpr, ew * dpr, eh * dpr, 0, 0, out.width, out.height);
+  oc.drawImage(m.cv, sx, sy, sw, sh, 0, 0, out.width, out.height);
   out.toBlob((blob) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

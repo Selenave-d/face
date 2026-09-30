@@ -387,7 +387,7 @@ function kopfSprite(h, p, t, namenAn) {
   const schnell = (h.plappertBis > t || h.akVon || h.blinzeltBis > qt) ? 2 : 1;
   // 每人固定随机相位（<1/12s）：48 人的换帧时刻摊进整帧，不再是同一帧全员重画
   if (h.spritePhase === undefined) h.spritePhase = strom(h.dna.seed, 'spritePhase').n() / 12;
-  const key = `${Math.floor((t + h.spritePhase) * 12 * schnell)}|${h.akName}|${namenAn ? 1 : 0}|${Math.round(p.mass * 10)}`;
+  const key = `${Math.floor((t + h.spritePhase) * 12 * schnell)}|${h.akName}|${namenAn ? 1 : 0}|${Math.round(p.mass * 10)}|${dpr}`;   // dpr 进键：跨屏拖窗后不再等 12fps tick 才自愈
   let sp = h.sprite;
   if (sp && sp.key === key) {
     // 命中也要钉锚点：mass0 量化后 resize 常不触发重画，但 h.cy 跟窗口高变了

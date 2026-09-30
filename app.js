@@ -3211,6 +3211,9 @@ function syncAktionsUI(name) {
 function waehleAktion(name) {
   if (!heads.length) return;
   const t = performance.now() / 1000;
+  // 鼠标连点同款节流（键盘已有 e.repeat 防长按连发）：0.25s 过渡期内重复点同一动作
+  // 会反复重掷过渡起点，把动作冻在插值半路
+  if (heads[0].akName === name && t - heads[0].akSeit < .25) return;
   heads[0].setAktion(name, t, 0);
   heads[0].akAuto = Math.max(heads[0].akAuto, t + 15);   // 手动接管后顺延自动动作钟，别一帧后被过期的随机动作顶掉
 }

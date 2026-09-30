@@ -317,11 +317,13 @@ addEventListener('keydown', (e) => {
 const FOLGE = ['ruhig', 'froh', 'boese', 'angst', 'weint', 'schlaeft'];
 let klickSperre = false;
 let druckTimer = 0;
+let druckX = 0, druckY = 0;
 canvas.addEventListener('pointerdown', (e) => {
   klickSperre = false;
   if (phase !== 'idle') return;
   const kind = kindBei(e.clientX, e.clientY);
   if (!kind) return;
+  druckX = e.clientX; druckY = e.clientY;
   clearTimeout(druckTimer);
   druckTimer = setTimeout(() => {
     if (phase !== 'idle') return;
@@ -334,6 +336,10 @@ canvas.addEventListener('pointerdown', (e) => {
     kind.hopAmp = .2;
   }, 400);
 });
+// 指针挪出 ~10px 视为拖动/改主意：取消长按——否则滑到别的孩子身上 0.4s 后仍会戳中先按住的那个
+canvas.addEventListener('pointermove', (e) => {
+  if (druckTimer && Math.hypot(e.clientX - druckX, e.clientY - druckY) > 10) druckEnde();
+}, { passive: true });
 const druckEnde = () => clearTimeout(druckTimer);
 canvas.addEventListener('pointerup', druckEnde, { passive: true });
 canvas.addEventListener('pointerleave', druckEnde, { passive: true });
@@ -677,12 +683,21 @@ function zeichneName(kind) {
   ctx.restore();
 }
 
+// 行墨压（clip 同法）：基线 ±0.4px、alpha .9~.97——铅字压不匀的印刷感，只施给 Courier 族
+// （楷体姓名牌是老师手写，不抖）。种子挂 dekoSaat（换班才重掷——klassenSeed 是递增计数器，
+// 孩子进出就变，不能挂）；标签带 druck: 前缀，避开陈设的 400+ 段
+function druckZeile(label, i) {
+  const r = strom(dekoSaat, 'druck:' + label + i);
+  return { dy: r.range(-.4, .4), a: r.range(.9, .97) };
+}
+
 function zeichneBanner(t) {
   if (!ergebnis || t > bannerBis) return;
   const rest = bannerBis - t;
   const alpha = Math.min(1, rest / .5, (2 - rest) * 4 + .2);
+  const d = druckZeile('banner', 0);
   ctx.save();
-  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha)) * d.a;
   ctx.font = '18px "Courier New", ui-monospace, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -692,7 +707,7 @@ function zeichneBanner(t) {
   const requis = ergebnis.notes?.length ? `　${ergebnis.notes.join(' ')}` : '';
   // 手机端横幅下移，避开右上角的过滤器两行（其下沿约 145）
   // 等式+notes 在窄屏必超宽（360px 仅等式就 ~410px）：maxWidth 整体压回屏内（与手机端 16px 边距一致）
-  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, innerWidth < 720 ? 164 : 92, innerWidth - 32);
+  ctx.fillText(`${ergebnis.name}！(${detail}) (${ergebnis.basis}+50)×${ergebnis.mult} = ${ergebnis.punkte}${requis}`, innerWidth / 2, (innerWidth < 720 ? 164 : 92) + d.dy, innerWidth - 32);
   ctx.restore();
 }
 
@@ -702,15 +717,20 @@ function zeichneGesamt() {
   try { ctx.letterSpacing = '2px'; } catch (e) { /*  ignore */ }
   ctx.textAlign = 'center';
   ctx.fillStyle = '#7a7268';
+  const dG = druckZeile('gesamt', 0);
+  ctx.globalAlpha = dG.a;
   // 手机端总分靠左，与右侧物种过滤器同一行；桌面居中在标题下
-  if (innerWidth < 720) { ctx.textAlign = 'left'; ctx.fillText(`总分 ${gesamt}`, 16, 104); }
-  else ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, 64);
+  if (innerWidth < 720) { ctx.textAlign = 'left'; ctx.fillText(`总分 ${gesamt}`, 16, 104 + dG.dy); }
+  else ctx.fillText(`总分 ${gesamt}`, innerWidth / 2, 64 + dG.dy);
   // 首访教学：没拍过照且没选满时先教核心循环；选满或拍过后回到长按彩蛋
   if (phase === 'idle') {
+    const dL = druckZeile('lernen', 0);
+    ctx.globalAlpha = dL.a;
+    ctx.textAlign = 'center';   // 窄屏总分分支改了 left，这里居中复位——否则教学文案从中线向右溢出
     ctx.fillStyle = '#a89f93';
     ctx.fillText(!abzuege.length && gewaehlt.size < 5
       ? `点孩子 选 5 个一起拍（还差 ${5 - gewaehlt.size} 个）`
-      : '长按孩子 逗一下表情', innerWidth / 2, 170);
+      : '长按孩子 逗一下表情', innerWidth / 2, 170 + dL.dy);
   }
   ctx.restore();
 }
@@ -803,8 +823,10 @@ function zeichneKarte(item, k, t, idx) {
   ctx.fillText(REQUISITEN[item.familie].name, 0, 28 * f);
   ctx.font = '11px "Courier New", ui-monospace, monospace';
   ctx.fillStyle = '#7a7268';
-  ctx.fillText(REQUISITEN[item.familie].desc(item.params), 0, 52 * f);
-  if (besitz.length >= 6) ctx.fillText('（收满：替换最旧）', 0, 70 * f);
+  const dK = druckZeile('karte', idx);   // idx 进标签：两卡各抖各的
+  ctx.globalAlpha = dK.a;
+  ctx.fillText(REQUISITEN[item.familie].desc(item.params), 0, 52 * f + dK.dy);
+  if (besitz.length >= 6) ctx.fillText('（收满：替换最旧）', 0, 70 * f + dK.dy);
   if (draft.wahl === idx) {
     ctx.font = '13px "Kaiti", "STKaiti", "楷体", serif';
     ctx.fillStyle = '#b0654a';
