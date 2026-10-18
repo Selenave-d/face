@@ -48,7 +48,7 @@
     .sprung { top: 66px; left: 16px; right: auto; flex-wrap: wrap; gap: 4px 14px; font-size: 10px; letter-spacing: 1px; }
     .sprung a { padding: 2px 0; }
     #leiste { flex-wrap: wrap; justify-content: center; width: calc(100vw - 24px); gap: 6px; bottom: 10px; }
-    #leiste button { font-size: 11px; letter-spacing: 2px; padding: 8px 12px 7px 14px; }
+    #leiste button { font-size: 11px; letter-spacing: 2px; padding: 8px 12px 7px 14px; min-height: 44px; }   /* 触控目标够大：11px 字+短边距原生只有 ~28px */
   }
   /* 窄桌面窗口（720~759）：导航收紧间距，别咬到不换行标题的尾巴 */
   @media (min-width: 720px) and (max-width: 759px) { .sprung { gap: 10px; } }

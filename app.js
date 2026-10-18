@@ -1372,7 +1372,7 @@ function drawGlasses(stift, ctx3d, feldL, feldR, augenMass, kind, pal, kopf, lay
 function drawZierrat(stift, ctx3d, dna, kind, ohrFelder, seite, pal) {
   if (kind === 'ohrring') {
     ohrFelder.forEach((feld, i) => {
-      if (feld.nz < -.1) return;
+      if (feld.nz < 0) return;   // 只给朝向观察者的耳朵画环：nz∈(-.1,0) 时耳锚点已在轮廓后、耳环圈整个压在脸缘上不被头遮挡
       const basis = feld.to(0, -.11, .02), r = .04, pts = [];
       for (let k = 0; k < 14; k++) {
         const a = k / 14 * 6.2832;
@@ -2186,7 +2186,7 @@ function umrissXBei(umriss, y, seite, von) {
   return x;
 }
 
-function drawEar(stift, feld, pal, seite, umriss) {
+function drawEar(stift, feld, pal, seite, umriss, hautFarbe) {
   if (feld.nz < -.15) return;
   const s = .13;
   const c = feld.x >= 0 ? 1 : -1;
@@ -2198,7 +2198,7 @@ function drawEar(stift, feld, pal, seite, umriss) {
   pts.push(P(1.5708, s * .7));
   const tuck = [];
   for (let i = 0; i <= 4; i++) tuck.push(feld.to(0, s * .86 * (1 - i / 2), -d - s * .9));
-  stift.flaeche(pts.concat(tuck), { farbe: pal.haut, trocken: true });
+  stift.flaeche(pts.concat(tuck), { farbe: hautFarbe || pal.haut, trocken: true });   // 近耳传颅骨的背光渐变：塞进颅内的 tuck 不再盖掉侧脸阴影
   // 外轮廓只画没被颅骨挡住的部分
   const h = Math.min(s * .5, l);
   const frei = (p) => c * (umrissXBei(umriss, p.y, c, p.x) - p.x) - h;
@@ -2834,21 +2834,19 @@ function drawHead(ctx, head, t) {
   const fernOhr = ohrL.nz <= ohrR.nz ? 0 : 1;
   const kopfh = mk.kopfbedeckung === 'kopfhoerer';
   if (!kopfh) drawEar(stift, ohren[fernOhr], pal, fernOhr === 0 ? -1 : 1, umriss);
-  // 4. 颅骨：肤色 + 背光渐变
+  // 4. 颅骨：肤色 + 背光渐变（grad 提名给近耳共用——耳片平涂会把颅内 tuck 段的阴影抹掉）
   stift.flaeche(umriss, { farbe: pal.haut, spur: 'kopf', wackel: .005 });
-  {
-    const gcx = -pose.yaw * dna.kopf.rx * .9 - dna.kopf.rx * .25;
-    const gcy = -dna.kopf.ry * .35;
-    const grad = ctx.createRadialGradient(gcx, gcy, dna.kopf.rx * .2, gcx * .4, gcy * .2, Math.max(dna.kopf.rx, dna.kopf.ry) * 1.55);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(.62, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, pal.schatten);
-    stift.flaeche(umriss, { farbe: grad, spur: 'kopf', wackel: .005 });
-  }
+  const gcx = -pose.yaw * dna.kopf.rx * .9 - dna.kopf.rx * .25;
+  const gcy = -dna.kopf.ry * .35;
+  const schattenGrad = ctx.createRadialGradient(gcx, gcy, dna.kopf.rx * .2, gcx * .4, gcy * .2, Math.max(dna.kopf.rx, dna.kopf.ry) * 1.55);
+  schattenGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  schattenGrad.addColorStop(.62, 'rgba(0,0,0,0)');
+  schattenGrad.addColorStop(1, pal.schatten);
+  stift.flaeche(umriss, { farbe: schattenGrad, spur: 'kopf', wackel: .005 });
   // 5. 轮廓线
   stift.zug(umriss, { spur: 'kopf', w: .03, wackel: .006, geschlossen: true, farbe: pal.tinte, spitz: .4 });
-  // 6. 近侧耳朵
-  if (!kopfh) drawEar(stift, ohren[1 - fernOhr], pal, fernOhr === 0 ? 1 : -1, umriss);
+  // 6. 近侧耳朵（套用颅骨同款背光渐变：耳与脸的明暗连续，平涂会留一块亮斑）
+  if (!kopfh) drawEar(stift, ohren[1 - fernOhr], pal, fernOhr === 0 ? 1 : -1, umriss, schattenGrad);
   // 7. 脸颊与面部痕迹
   drawCheeks(stift, ctx3d, dna.layout, mk.backe, pal, z.wach, Math.max(.1, groessen.auge * .95), dna.punktMass);
   drawZeichen(stift, ctx3d, dna.layout, mk.zeichen, dna.seite, groessen.auge, pal);
@@ -2887,7 +2885,8 @@ function drawHead(ctx, head, t) {
   drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
   drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
   // 14. 小装饰（耳环/创可贴贴在最上层；帽子或 afro/爆炸卷盖住耳朵时不画耳环，免得浮在发块上）
-  const ohrVerdeckt = kopfh || dna.merkmale.haar === 'afro' || dna.merkmale.haar === 'lockenwolke';
+  // zoepfe 双辫垂过耳区（辫心 ±1.17rx、内缘 1.04rx 恰好盖住耳环锚点外 .06 处）——环画最顶层会浮在发辫上
+  const ohrVerdeckt = kopfh || ['afro', 'lockenwolke', 'zoepfe'].includes(dna.merkmale.haar);
   drawZierrat(stift, ctx3d, dna, mk.zierrat === 'ohrring' && ohrVerdeckt ? 'keiner' : mk.zierrat, ohren, dna.seite, pal);
 
   ctx.restore();
