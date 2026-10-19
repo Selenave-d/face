@@ -7,7 +7,7 @@
 <title>纸上的小人 · 一墙脸</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
-  canvas { display: block; cursor: crosshair; }
+  canvas { display: block; cursor: crosshair; touch-action: manipulation; }   /* 连点大脸换表情不触发双击放大 */
   #titel {
     position: fixed; top: 30px; left: 34px; transform: rotate(-2.5deg);
     font: 19px/1.9 "Courier New", ui-monospace, monospace; color: #3a3440;

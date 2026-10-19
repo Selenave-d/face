@@ -357,7 +357,7 @@ function raketenZeichnen(t) {
   for (let i = raketen.length - 1; i >= 0; i--) {
     const rk = raketen[i];
     const p = (t - rk.seit) / rk.dauer;
-    if (p < 0) continue;
+    if (p < 0) { if (!feier) raketen.splice(i, 1); continue; }   // 庆祝结束：入队未爆的残弹清掉，不再凭空炸响
     if (p >= 1) { raketen.splice(i, 1); continue; }
     const wand = 1 - Math.pow(1 - p, 3);          // 先快后慢地张开
     const fade = Math.min(1, (1 - p) * 2.4);      // 尾段淡出

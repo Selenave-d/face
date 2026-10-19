@@ -394,6 +394,7 @@ function draftPick(i, t) {
 
 function knips(t) {
   if (gewaehlt.size !== 5 || phase !== 'idle') return;
+  knipsBtn.disabled = true;   // 过场全程禁点：连点守卫静默吞掉无反馈，看起来像没反应
   ergebnis = besteHand([...gewaehlt].map((i) => kinder[i]), besitz);
   // 年鉴首录：升级后与升级前的名字都算（橡皮把一对升成两对，不影响「一对」的收录）
   const neu = [...new Set([ergebnis.name, ergebnis.original])].filter((n) => n && !jahrbuch.has(n));

@@ -480,13 +480,16 @@ function zeichneBrauen(stift, rec, k, face) {
   const kappe = ['bob', 'bowl', 'long', 'pigtails', 'sidepony', 'buns', 'topknot', 'cowlick'].includes(rec.hair.style);
   const yCut = kappe ? -.95 * k - .44 * rec.skull.s * k * (rec.hair.style === 'bowl' ? .45 : .25) : -1e9;
   const ey = Math.max(yCut + .04 * k, -.98 * k - .13 * k * rec.eyes.scale);
+  // 戴镜角色的怒/怕眉整条抬到镜片上缘之上：镜片以眼心为圆心、半径 lr，原眉带 ey±.05k 整个压在镜片里
+  const lr = Math.min(.15 * k, Math.max(.085 * k, ex * .92));
+  const hebe = rec.extras.glasses ? lr + .04 * k : 0;
   for (const s of [-1, 1]) {
     if (face === 'boese') {
       // 外高内低，压向眼睛（标签 210 段：200/202 段与魇的额眼 201/202 撞号会抖动同步）
-      stift.line([[s * (ex + .09 * k), ey - .04 * k], [s * (ex - .06 * k), ey + .02 * k]], 1.6, { label: 210 + s });
+      stift.line([[s * (ex + .09 * k), ey - .04 * k - hebe], [s * (ex - .06 * k), ey + .02 * k - hebe]], 1.6, { label: 210 + s });
     } else {
       // 内高外低的八字
-      stift.line([[s * (ex - .07 * k), ey - .05 * k], [s * (ex + .08 * k), ey + .01 * k]], 1.3, { label: 212 + s, alpha: .8 });
+      stift.line([[s * (ex - .07 * k), ey - .05 * k - hebe], [s * (ex + .08 * k), ey + .01 * k - hebe]], 1.3, { label: 212 + s, alpha: .8 });
     }
   }
 }
@@ -500,8 +503,9 @@ function zeichneZzz(stift, rec, k, qt) {
   const z = (x, y, g, label, alpha) => {
     stift.line([[x, y], [x + g, y], [x, y + g * .9], [x + g, y + g * .9]], 1.2, { label, alpha });
   };
-  z(R * .7, -1.45 * k, .09 * k, 210, .5 * fade);
-  z(R * .95, -1.62 * k, .12 * k, 211, .7 * fade);
+  // 起点外移到耳/角区外（熊耳 x≤.84RX、魇角尖≤.89RX）：原 R*.7 落在熊右耳内、擦魇角上段
+  z(R * 1.12, -1.5 * k, .09 * k, 210, .5 * fade);
+  z(R * 1.38, -1.66 * k, .12 * k, 211, .7 * fade);
 }
 
 function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
@@ -1072,13 +1076,15 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
     }
   }
   if (x.tears || face === 'weint') {
-    // 泪滴：哭表情必掉，且更大、可能两行
+    // 泪滴：哭表情必掉，且更大、可能两行。吻部物种 x 外移到吻宽外——长吻狗的吻瓣上轮廓
+    // 会切进 R*.45 处的泪滴（吻半宽最大 .32k > .45R≈.2k）
+    const tx = rec.skull.muzzle > 0 ? R * .8 : R * .45;
     const ey = -.98 * k;
-    const tropfen = (tx, ty, g, label, alpha) => {
-      stift.line([[tx, ty + g], [tx - g * .4, ty + g * .35], [tx, ty], [tx + g * .4, ty + g * .35]], 1.1, { closed: true, label, alpha });
+    const tropfen = (tx2, ty, g, label, alpha) => {
+      stift.line([[tx2, ty + g], [tx2 - g * .4, ty + g * .35], [tx2, ty], [tx2 + g * .4, ty + g * .35]], 1.1, { closed: true, label, alpha });
     };
-    tropfen(R * .45, ey + .12 * k, .07 * k, 163, .75);
-    if (face === 'weint') tropfen(-R * .45, ey + .14 * k, .09 * k, 164, .8);
+    tropfen(tx, ey + .12 * k, .07 * k, 163, .75);
+    if (face === 'weint') tropfen(-tx, ey + .14 * k, .09 * k, 164, .8);
   }
 }
 
