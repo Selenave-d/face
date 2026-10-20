@@ -367,19 +367,60 @@ const abzuege = [];           // { recs: [...5], titel }
  * 七种集齐全班错峰齐跳庆毕业。换班不清（与总分/道具同款跨班记忆）。 */
 const jahrbuch = new Set();
 
+/* ================= 存档（localStorage，全 try/catch：file:// 或私密模式下当没玩过） ================= */
+const SPEICHER_KEY = 'foto.spielstand';   // 跟文件的德语命名风：Spielstand=存档
+const HAND_NAMEN = ['一整窝', '四条', '满堂红', '三条', '两对', '一对', '彩虹班'];   // 与 musterAusZaehl 值域一致
+
+function leseSpeicher() {                 // → 合法规格对象或 null（永不抛）
+  try {
+    const roh = window.localStorage.getItem(SPEICHER_KEY);
+    if (!roh) return null;
+    const d = JSON.parse(roh);
+    if (!d || d.v !== 1) return null;     // 版本不符整体丢弃：未来升版即自动清旧档
+    const out = { gesamt: 0, jahrbuch: [], besitz: [] };
+    if (Number.isFinite(d.gesamt) && d.gesamt >= 0) out.gesamt = Math.floor(d.gesamt);
+    if (Array.isArray(d.jahrbuch))
+      out.jahrbuch = [...new Set(d.jahrbuch.filter((n) => HAND_NAMEN.includes(n)))];   // 白名单：手改塞假牌型进不来
+    if (Array.isArray(d.besitz))
+      out.besitz = d.besitz.filter((b) => b && REQUISITEN[b.familie]
+        && b.params && typeof b.params === 'object').slice(0, 6);
+    return out;
+  } catch (e) { return null; }
+}
+
+function sichern() {                      // 写失败静默：游戏照跑，只是不存
+  try {
+    window.localStorage.setItem(SPEICHER_KEY, JSON.stringify({
+      v: 1, gesamt, jahrbuch: [...jahrbuch], besitz,
+    }));
+  } catch (e) { /* 私密模式 setItem 抛 QuotaExceeded——无档可存不致命 */ }
+}
+
+// 启动恢复：gesamt 是 let 直接赋；两个集合是 const，原地填（贴纸/征集令不存——贴纸是会话成绩册、征集令跟班走）
+const stand = leseSpeicher();
+if (stand) {
+  gesamt = stand.gesamt;
+  stand.jahrbuch.forEach((n) => jahrbuch.add(n));
+  besitz.push(...stand.besitz);
+}
+
 /* 墨渍：墨水介质的孩子离场时，在站过的架子上留一片渐渐变淡的墨渍（墙上的记忆） */
 const mauernFlecken = [];     // { fx, reihe, seed, von }——存槽位分数与行号，绘制时按当前窗口重投影（架子线随 resize 变，墨渍钉在架上不悬空）
 
-function machRequisit() {
+function machRequisit(nimmNicht) {
   const r = strom((klassenSeed * 7 + ++draftZaehler * 7919) | 0, 'requisit');
-  // 未拥有的家族优先；全齐了就随便来（收下时会替换最旧）
-  const frei = Object.keys(REQUISITEN).filter((f) => !besitz.some((b) => b.familie === f));
-  const familie = frei.length ? r.pick(frei) : r.pick(Object.keys(REQUISITEN));
+  // 未拥有的家族优先；全齐了就随便来（收下时会替换最旧）；排除同批另一张的家族——
+  // 收满 5/6 家后两张卡若同族，眼镜盒/旗帜这类空参数道具会像素级相同，二选一失去意义
+  const frei = Object.keys(REQUISITEN).filter((f) => f !== nimmNicht
+    && !besitz.some((b) => b.familie === f));
+  const familie = frei.length ? r.pick(frei)
+    : r.pick(Object.keys(REQUISITEN).filter((f) => f !== nimmNicht));
   return { familie, params: REQUISITEN[familie].roll(r) };
 }
 
 function draftStart(t) {
-  draft = { items: [machRequisit(), machRequisit()], seit: t, wahl: -1, wahlT: 0, umgesetzt: false };
+  const a = machRequisit();
+  draft = { items: [a, machRequisit(a.familie)], seit: t, wahl: -1, wahlT: 0, umgesetzt: false };
   phase = 'draft';
 }
 
@@ -390,6 +431,7 @@ function draftPick(i, t) {
   const item = draft.items[i];
   if (besitz.length >= 6) besitz.shift();   // 收满后新收的替换最旧
   besitz.push(item);
+  sichern();   // 四个收道具入口（点卡/键盘/自动收/换班收）全漏斗进这里，单点写档
 }
 
 function knips(t) {
@@ -433,6 +475,7 @@ function knips(t) {
     });
     ergebnis = { ...ergebnis, notes: [...(ergebnis.notes ?? []), '毕业快乐！'] };
   }
+  sichern();   // gesamt/jahrbuch 在此定型——庆祝靠「首录且首次到 7」的不变式触发，恢复存档不会重放
 }
 knipsBtn.addEventListener('click', () => knips(performance.now() / 1000));
 
@@ -1167,6 +1210,8 @@ window.__foto = {
   kinder: () => kinder.map((k) => ({ platz: k.platz, zustand: k.zustand, name: k.name, art: k.rec.art, media: k.rec.media })),
   gesichter: () => kinder.map((k) => k.face).join(','),
   phase: () => phase,
+  stand: () => ({ gesamt, jahrbuch: [...jahrbuch], besitz: besitz.length }),
+  zuruecksetzen: () => { try { window.localStorage.removeItem(SPEICHER_KEY); } catch (e) {} gesamt = 0; jahrbuch.clear(); besitz.length = 0; },   // 无头测试用清档
   _kinder: kinder,              // 测试用：可直接改 rec.media / face
   draft: () => draftStart(performance.now() / 1000),   // 强制弹出二选一
   pickDraft: (i) => draftPick(i, performance.now() / 1000),
