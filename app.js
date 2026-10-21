@@ -2980,6 +2980,13 @@ function papierAuf(c, w, h) {
 // 先画再拓：每帧整屏铺纸是 2~10ms 的大头，离屏画一次记住逐帧贴回；
 // 尺寸/dpr 变了才重画。贴回后恢复 dpr 变换——后续绘制仍按 CSS 像素坐标走。
 let papierMemo = null;
+// GPU 上下文丢失恢复（休眠标签页/驱动重置）后离屏画布像素被清空却不重烘——
+// 统一置空三处共享缓存，下一帧全部 miss 自愈；精灵挂各 Head 实例上，一并清
+canvas.addEventListener('contextrestored', () => {
+  papierMemo = null;
+  grainPattern = null;
+  heads.forEach((h) => { h.sprite = undefined; h.cache.stift = null; h.cache.stiftCtx = null; });
+});
 function papierSchnell() {
   const w = Math.ceil(innerWidth), h = Math.ceil(innerHeight);
   if (!papierMemo || papierMemo.w !== w || papierMemo.h !== h || papierMemo.dpr !== dpr) {

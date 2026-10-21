@@ -504,6 +504,8 @@ function resize() {
   platzeLegen();
 }
 addEventListener('resize', resize);
+// GPU 上下文恢复后精灵底片被清空——置空让下一帧 miss 重烘（app.js 层已清 papier/grain/heads）
+canvas.addEventListener('contextrestored', () => leute.forEach((h) => { h.sprite = undefined; h.cache.stift = null; h.cache.stiftCtx = null; }));
 resize();
 requestAnimationFrame(rahmen);
 

@@ -591,6 +591,8 @@ function resize() {
   canvas.style.height = innerHeight + 'px';
 }
 addEventListener('resize', resize);
+// GPU 上下文恢复后整页记忆底片被清空——置空让下一帧 miss 重烘（app.js 层已清 papier/grain/heads）
+canvas.addEventListener('contextrestored', () => { blattMemo = null; });
 resize();
 requestAnimationFrame(rahmen);
 
@@ -604,6 +606,8 @@ document.getElementById('neues').addEventListener('click', () => {
 // 存图片：从整页记忆（blattMemo 永远是无缩放 1:1 成品）裁出导出 PNG（零依赖）；
 // 四周外扩一点，撕纸边完整入图——直接读主画布的话，换纸过场 0.3s 内点存图会得到缩放中的纸
 document.getElementById('speicher').addEventListener('click', () => {
+  // 换一张后一帧的竞态：saat 已变、memo 还是旧报纸（~16ms 窗口）——先同步驱动一帧重采，导出与文件名同一张纸
+  if (!blattMemo || blattMemo.key.split('|')[2] !== String(saat)) rahmen(performance.now());
   if (!blattMemo) return;
   const g = blattGeometrie();
   const ex = Math.max(0, g.x - g.w * .035), ey = Math.max(0, g.y - g.w * .035);

@@ -139,18 +139,23 @@ function besteHand(kinder, items = []) {
   let best = null;
   for (const dim of dims) {
     const zaehl = {};
+    const werte = [];
     for (const k of kinder) {
       const v = kindZuege(k)[dim];
       zaehl[v] = (zaehl[v] || 0) + 1;
+      werte.push(v);
     }
-    for (const ex of extras) if (ex.dim === dim) zaehl[ex.value] = (zaehl[ex.value] || 0) + ex.n;
+    // 全员互异 = 该维天然彩虹班（5 值最高牌型），道具的 +1 只会把它跌成一对幻影——不注入；
+    // 有任何真重复时照旧注入（玩偶一对→三条的猎牌功能完整保留）。21 行的满窝封顶语义不动
+    const alleVerschieden = new Set(werte).size === kinder.length;
+    for (const ex of extras) if (ex.dim === dim && !alleVerschieden) zaehl[ex.value] = (zaehl[ex.value] || 0) + ex.n;
     for (const v in zaehl) if (zaehl[v] > 3 && MANGEL[dim]?.includes(v)) zaehl[v] = 3;   // 缺席大桶最多按三条计
     const [name, basis, mult, info] = musterAusZaehl(zaehl);
     const punkte = (basis + kinder.length * 10) * mult;
-    if (!best || punkte > best.punkte) best = { name, basis, mult, dim, punkte, info };
+    if (!best || punkte > best.punkte) best = { name, basis, mult, dim, punkte, info, ohneEx: alleVerschieden };
   }
   const notes = [];
-  for (const ex of extras) if (ex.dim === best.dim) notes.push(ex.note);
+  for (const ex of extras) if (ex.dim === best.dim && !best.ohneEx) notes.push(ex.note);
   const original = best.name;   // 橡皮升级前的原始牌名（无橡皮时 === name，去重交给下文 Set）：征集令/年鉴按它判——持有橡皮不会让「一对」永远收不到
   // 橡皮：只有一对时擦掉一个异类，升级为两对
   if (best.name === '一对' && items.some((it) => it.familie === 'xiangpi')) {

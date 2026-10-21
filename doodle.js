@@ -286,7 +286,8 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     const j = jr(label, 3);
     ctx.beginPath();
     ctx.arc(x + (j() - .5) * r * .3, y + (j() - .5) * r * .3, r * (0.92 + j() * .16), 0, TAU2);
-    ctx.fillStyle = `rgba(${M.farbe},${Math.min(1, alpha)})`;
+    // 软耦合介质 alpha：瞳点仍恒重于本介质的线（保住「眼睛醒目」），但水彩的点不再比水彩线跳 1.5 倍
+    ctx.fillStyle = `rgba(${M.farbe},${Math.min(1, alpha * (.55 + .45 * M.alpha))})`;
     ctx.fill();
   }
   function paperDot(x, y, r, alpha = .95) {
@@ -392,14 +393,15 @@ function bleiStift(ctx, tick, mediaId, farbT = 0) {
     if (dunkel) {
       if (istWash) {
         wash(pts, [125, 110, 105], M.dunkelWash ?? .45, 11);   // 介质各自的深色覆盖度（marker .85 的"平涂高覆盖"此前从未生效）
-        hatch(pts, .07 * (opt.k ?? 10) / 10, wk, .35, 12);   // 深色角色：淡彩 + 局部排线
+        hatch(pts, .07 * (opt.k ?? 10) / 10, wk, .35, 12, mediaId === 'marker' ? .6 : 1);   // marker 排线收细：M.w 的粗头笔权重全量继承会 82% 占空比、纹理被吃掉
       } else {
         hatch(pts, .055 * (opt.k ?? 10) / 10, wk, .8, 14);
       }
       return;
     }
-    // 浅色角色：水彩给一层淡淡的个人色调，其余留纸白
-    if (mediaId === 'watercolour') wash(pts, washRGB, .22, 13);
+    // 浅色角色：水彩/马克给一层淡淡的个人色调（石墨/墨水仍留纸白）——
+    // marker .25 的两遍有效 ≈ 贴纸的 .35 平涂，两种尺寸的肤色一致
+    if (istWash) wash(pts, washRGB, mediaId === 'marker' ? .25 : .22, 13);
   }
   return { line, dot, paperDot, poly, hatch, wash, tone, haut, washRGB, istWash, flach: (an) => { flachModus = !!an; } };
 }
