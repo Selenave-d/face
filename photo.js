@@ -388,7 +388,11 @@ function leseSpeicher() {                 // → 合法规格对象或 null（�
       out.jahrbuch = [...new Set(d.jahrbuch.filter((n) => HAND_NAMEN.includes(n)))];   // 白名单：手改塞假牌型进不来
     if (Array.isArray(d.besitz))
       out.besitz = d.besitz.filter((b) => b && REQUISITEN[b.familie]
-        && b.params && typeof b.params === 'object').slice(0, 6);
+        && b.params && typeof b.params === 'object'
+        // 家族字段校验：denglong 缺 r 会让 basis() 出 NaN 顺总分写成 null 归零、wanou 缺 art 出 undefined 幻影计数
+        && (b.familie !== 'denglong' || (Number.isFinite(b.params.r) && b.params.r >= .8 && b.params.r <= 1.6))
+        && (b.familie !== 'laba' || (Number.isFinite(b.params.winkel) && b.params.winkel >= .5 && b.params.winkel <= 1.1))
+        && (b.familie !== 'wanou' || !!ART_NAME[b.params.art])).slice(0, 6);
     return out;
   } catch (e) { return null; }
 }
@@ -563,7 +567,11 @@ for (const [gruppe, key] of [['filterArt', 'art'], ['filterMedia', 'media']]) {
   if (!box) continue;
   box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
     filter[key] = b.dataset.v;
-    box.querySelectorAll('button').forEach((x) => x.classList.toggle('an', x === b));
+    box.querySelectorAll('button').forEach((x) => {
+      const an = x === b;
+      x.classList.toggle('an', an);
+      x.setAttribute('aria-pressed', an ? 'true' : 'false');   // 读屏同享激活态，不只靠颜色
+    });
     neueKlasse();   // 过滤器立即生效：整班按新偏好重抽
   }));
 }

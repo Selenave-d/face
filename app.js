@@ -2346,7 +2346,7 @@ const AKTIONEN = {
       const flick = 1 - Math.abs(f);
       // 横向偏移必须乘 si：否则挥左手时手被推向画面右侧，横穿身体藏到头后
       p.arm[i] = { ex: .45 * si, ey: -.9, hx: (.7 + .3 * f) * si, hy: -3.35 + .25 * Math.abs(f) };
-      p.arm[1 - i] = { ex: -.03, ey: .03, hx: -.06, hy: .04 };
+      p.arm[1 - i] = { ex: .03 * si, ey: .03, hx: .06 * si, hy: .04 };   // 休息臂同乘 si 向身体收——不乘则恒向画面左，挥右手时把左臂推离身体
       p.lean = .05; p.dx = .03; p.dy = -.02 * flick;
       p.kopfRoll = -.04 + f * .015;
       return p;
@@ -3212,7 +3212,11 @@ if (!FOTO && !CROWD && !CLIP && !AVATAR) {
 
 // 动作按钮与键盘 1-5（只单人模式有）
 function syncAktionsUI(name) {
-  document.querySelectorAll('.ak').forEach((b) => b.classList.toggle('aktiv', b.dataset.ak === name));
+  document.querySelectorAll('.ak').forEach((b) => {
+    const an = b.dataset.ak === name;
+    b.classList.toggle('aktiv', an);
+    b.setAttribute('aria-pressed', an ? 'true' : 'false');   // 读屏同享激活态，不只靠颜色
+  });
 }
 function waehleAktion(name) {
   if (!heads.length) return;

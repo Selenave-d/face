@@ -245,6 +245,7 @@ function gesichtKnopfe() {
     const g = b.dataset.g;
     const an = g === gesichtForm || (blickZiel && ((g === 'links' && blickZiel.x < 0) || (g === 'rechts' && blickZiel.x > 0)));
     b.classList.toggle('an', !!an);
+    b.setAttribute('aria-pressed', an ? 'true' : 'false');   // 读屏同享激活态，不只靠颜色
   }
 }
 
