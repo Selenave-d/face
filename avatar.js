@@ -72,29 +72,32 @@ function zeichneBuehne(t) {
   kopf.cx = b.x + b.s / 2;
   kopf.cy = b.y + bedarf.oben * kopf.mass + b.s * .07;
   drawHead(ctx, kopf, t);
-  // 存档印章：点「存头像」后 1.2 秒，舞台右下角盖一枚朱红「存」章——
-  // 前 0.15s 从 1.18 倍缩到 1（盖下去的手感），末 0.35s 淡出；导出走 avatarPNG 的离屏画布，不会带上它
-  if (t < stempelBis) {
-    const rest = stempelBis - t;
-    const k = 1 + Math.max(0, (rest - 1.05) / .15) * .18;
-    ctx.save();
-    ctx.translate(b.x + b.s - 40, b.y + b.s - 34);
-    ctx.rotate(-.14);
-    ctx.scale(k, k);
-    ctx.globalAlpha = .85 * Math.min(1, rest / .35);
-    ctx.strokeStyle = '#b0654a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-15, -11, 30, 22);
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-12.5, -8.5, 25, 17);
-    ctx.fillStyle = '#b0654a';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = '14px "Kaiti", "STKaiti", "楷体", serif';
-    ctx.fillText('存', 0, 1);
-    ctx.restore();
-  }
   return b;
+}
+
+// 存档印章：点「存头像」后 1.2 秒，舞台右下角盖一枚朱红「存」章——
+// 前 0.15s 从 1.18 倍缩到 1（盖下去的手感），末 0.35s 淡出；导出走 avatarPNG 的离屏画布，不会带上它。
+// 画在整页记忆之上（1.2s 窗口内连续变化，不进底片）
+function stempelZeichnen(t, b) {
+  if (t >= stempelBis) return;
+  const rest = stempelBis - t;
+  const k = 1 + Math.max(0, (rest - 1.05) / .15) * .18;
+  ctx.save();
+  ctx.translate(b.x + b.s - 40, b.y + b.s - 34);
+  ctx.rotate(-.14);
+  ctx.scale(k, k);
+  ctx.globalAlpha = .85 * Math.min(1, rest / .35);
+  ctx.strokeStyle = '#b0654a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-15, -11, 30, 22);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-12.5, -8.5, 25, 17);
+  ctx.fillStyle = '#b0654a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '14px "Kaiti", "STKaiti", "楷体", serif';
+  ctx.fillText('存', 0, 1);
+  ctx.restore();
 }
 
 /* ================= 导出：512×512 PNG ================= */
@@ -134,6 +137,28 @@ function frisch() {   // 换头像/初次加载后刷新导出缓存
 /* ================= 主循环与按钮 ================= */
 
 let vorige = 0;
+// 整页记忆（clip blattMemo 同款）：舞台+裁切线+档案号 miss 帧全画后设备像素 1:1 截进离屏，
+// 其余帧整张贴回——胸像全量 drawHead 是全页最贵单项，六页最后一个整页直绘热点收口。
+// 表情开关进键（点了立即换画）；存档章 1.2s 连续动画画在记忆之上不进底片
+let buehnenMemo = null;
+
+function erfasseBuehne(key, b) {
+  const pad = 16, unten = 18;   // 裁切线外伸 15px、档案号行到 b.y+b.s+16
+  const bx = Math.max(0, Math.round((b.x - pad) * dpr));
+  const by = Math.max(0, Math.round((b.y - pad) * dpr));
+  const bw = Math.min(canvas.width - bx, Math.round((b.s + pad * 2) * dpr));
+  const bh = Math.min(canvas.height - by, Math.round((b.s + pad + unten) * dpr));
+  const m = buehnenMemo && buehnenMemo.cv ? buehnenMemo : (buehnenMemo = { cv: document.createElement('canvas') });
+  if (m.cv.width !== bw || m.cv.height !== bh) { m.cv.width = bw; m.cv.height = bh; }
+  const cc = m.cv.getContext('2d');
+  cc.setTransform(1, 0, 0, 1, 0, 0);
+  cc.clearRect(0, 0, bw, bh);
+  cc.drawImage(canvas, bx, by, bw, bh, 0, 0, bw, bh);
+  return { cv: m.cv, key, bx, by, bw, bh };
+}
+
+canvas.addEventListener('contextrestored', () => { buehnenMemo = null; });   // GPU 恢复后底片被清空，下一帧重采
+
 function rahmen(now) {
   const t = now / 1000;
   const dt = vorige ? Math.min(t - vorige, .05) : .016;
@@ -143,7 +168,18 @@ function rahmen(now) {
   hookSync();
   gesichtKnopfe();
   papierSchnell();   // 底纹离屏拓印（photo/crowd 同款）：三遍全屏 fill 换一张 drawImage
-  zeichneBuehne(t);
+  const b = buehne();
+  const schnell = (kopf.blinzeltBis > t || kopf.plappertBis > t) ? 2 : 1;   // 眨眼/嘟囔窗 16fps，纯 8fps 会把眨眼采成瞪眼
+  const key = `${Math.floor(t * 8 * schnell)}|${schnell}|${saat}|${kopf.gesicht ? 1 : 0}`
+    + `|${Math.round(b.x)}|${Math.round(b.y)}|${Math.round(b.s)}|${dpr}`;
+  if (!buehnenMemo || buehnenMemo.key !== key) {
+    zeichneBuehne(t);
+    buehnenMemo = erfasseBuehne(key, b);
+    stempelZeichnen(t, b);
+    requestAnimationFrame(rahmen); return;   // 主画布已是成品
+  }
+  ctx.drawImage(buehnenMemo.cv, buehnenMemo.bx / dpr, buehnenMemo.by / dpr, buehnenMemo.bw / dpr, buehnenMemo.bh / dpr);
+  stempelZeichnen(t, b);
   requestAnimationFrame(rahmen);
 }
 

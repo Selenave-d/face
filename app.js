@@ -2348,6 +2348,7 @@ const AKTIONEN = {
       p.arm[i] = { ex: .45 * si, ey: -.9, hx: (.7 + .3 * f) * si, hy: -3.35 + .25 * Math.abs(f) };
       p.arm[1 - i] = { ex: .03 * si, ey: .03, hx: .06 * si, hy: .04 };   // 休息臂同乘 si 向身体收——不乘则恒向画面左，挥右手时把左臂推离身体
       p.lean = .05; p.dx = .03; p.dy = -.02 * flick;
+      p.bein[0].fy = p.bein[1].fy = .04 * flick;   // 同款踝补偿：踮脚不浮空（在 neutralPose 默认腿上补字段）
       p.kopfRoll = -.04 + f * .015;
       return p;
     },
@@ -2360,7 +2361,9 @@ const AKTIONEN = {
       const w = q * TAU / 1.15;
       for (let i = 0; i < 2; i++) {
         const a = lift(q / 1.15 + i * .5);
-        p.bein[i] = { kx: (i ? 1 : -1) * .03 * a, ky: -.38 * a, fx: (i ? -1 : 1) * .08 * a, fy: -.55 * a };
+        p.bein[i] = { kx: (i ? 1 : -1) * .03 * a, ky: -.38 * a, fx: (i ? -1 : 1) * .08 * a,
+          // 踝补偿吃掉双份 dy（translate + Y()，jump 的 ×2 规则）：支撑脚钉地，摆动脚离地恒 .55a
+          fy: -.55 * a + .07 * Math.abs(Math.sin(w)) };
         p.arm[i] = { ex: 0, ey: -.18 * lift(q / 1.15 + (1 - i) * .5), hx: -.14 * Math.sin(w), hy: -.34 * lift(q / 1.15 + (1 - i) * .5) };
       }
       p.dy = -.035 * Math.abs(Math.sin(w));
@@ -2410,8 +2413,8 @@ const AKTIONEN = {
       p.kopfRoll = -hip * .07;
       p.arm[0] = { ex: -.15, ey: -.3 - upL * .45, hx: -.3 + hip * .1, hy: -1.3 - upL * .7 - bounce * .12 };
       p.arm[1] = { ex: .15, ey: -.3 - upR * .45, hx: .3 + hip * .1, hy: -1.3 - upR * .7 - bounce * .12 };
-      p.bein[0] = { kx: 0, ky: upL * .05, fx: 0, fy: -upR * .12 * bounce };
-      p.bein[1] = { kx: 0, ky: upR * .05, fx: 0, fy: -upL * .12 * bounce };
+      p.bein[0] = { kx: 0, ky: upL * .05, fx: 0, fy: -upR * .12 * bounce + .08 * bounce };   // 末项吃掉双份 dy（-.04·bounce 的 ×2），脚跟弹跳不浮空
+      p.bein[1] = { kx: 0, ky: upR * .05, fx: 0, fy: -upL * .12 * bounce + .08 * bounce };
       return p;
     },
   },
@@ -2558,16 +2561,6 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     beinKette.push({ s, i, H, K, A, bp });
   }
   if (ko.hose === 'rock') {
-    const rockSaumY = Y(hipY + bodyLen * .26);
-    const rock = [
-      { x: mx - tailleHW * .92, y: Y(hipY + .06) },
-      { x: mx - hipHW * 1.28 - pose.lean * .3, y: rockSaumY },
-      { x: mx, y: rockSaumY + .05 },
-      { x: mx + hipHW * 1.28 - pose.lean * .3, y: rockSaumY },
-      { x: mx + tailleHW * .92, y: Y(hipY + .06) },
-    ];
-    stift.flaeche(rock, { farbe: pal.stoffTief, spur: 'rock', wackel: .005 });
-    stift.zug(rock, { spur: 'rock-rand', geschlossen: true, ...linie });
     for (const { s, K, A } of beinKette) {
       const wade = gliedKette([K, A], [beinHW * .4, beinHW * .3]);
       stift.flaeche(wade, { farbe: pal.haut, spur: `wade${s}`, wackel: .004, trocken: true });
@@ -2625,6 +2618,21 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     stift.zug(schuh, { spur: `schuh-rand${s}`, geschlossen: true, ...duenn });
     const sohle = schuh.filter((p) => p.y > fy - .05);
     if (sohle.length >= 2) stift.zug(sohle, { spur: `sohle${s}`, w: .018, wackel: .003, farbe: pal.tinte, deckung: .8 });
+  }
+
+  // 裙片最后盖在小腿与鞋之上——物理正确（腿在裙后）：跳跃收腿时踝/鞋/小腿不再压在裙色上，
+  // 中立位视觉零变化（腿中立全在裙摆以下，只差一条 ≤.03 的膝尖窄条从「压裙上」变「藏裙下」）
+  if (ko.hose === 'rock') {
+    const rockSaumY = Y(hipY + bodyLen * .26);
+    const rock = [
+      { x: mx - tailleHW * .92, y: Y(hipY + .06) },
+      { x: mx - hipHW * 1.28 - pose.lean * .3, y: rockSaumY },
+      { x: mx, y: rockSaumY + .05 },
+      { x: mx + hipHW * 1.28 - pose.lean * .3, y: rockSaumY },
+      { x: mx + tailleHW * .92, y: Y(hipY + .06) },
+    ];
+    stift.flaeche(rock, { farbe: pal.stoffTief, spur: 'rock', wackel: .005 });
+    stift.zug(rock, { spur: 'rock-rand', geschlossen: true, ...linie });
   }
 
   // 衣身：斜肩（脖根外侧斜向下到肩点）→ 两侧直筒微收 → 下摆盖过裤腰
