@@ -141,6 +141,12 @@ function platzeLegen() {
 function sichtbarAus(w) {
   return 1 + (leute.length - 1) * Math.pow((w - 1) / 499, 1.65);
 }
+// 逆映射（幂函数严格单调，逆唯一）——键盘步进定义在「人数域」再映射回滑块值，
+// 否则从 1 连按 49 次右箭头才见到第二个人（WAI-APG：非线性滑块按映射值步进）
+function sichtbarEin(s) {
+  const n = Math.max(1, leute.length - 1);
+  return 1 + 499 * Math.pow((clamp(s, 1, leute.length) - 1) / n, 1 / 1.65);
+}
 
 let wert = 1, ziel = 1;      // wert 连续（拖拽/吸附中），ziel 是整数目标
 let ziehe = false;           // 指针正握着手柄
@@ -198,10 +204,15 @@ schieberEl.addEventListener('lostpointercapture', () => endeZug());
 schieberEl.addEventListener('keydown', (e) => {
   if (e.key === 'Home') { e.preventDefault(); snappZu(1); return; }
   if (e.key === 'End') { e.preventDefault(); snappZu(500); return; }
-  const schritt = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -25, PageUp: 25 }[e.key];
+  const schritt = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 }[e.key];   // ±10 人：满编才 34-48 人，±50 等价 Home/End
   if (schritt === undefined) return;
   e.preventDefault();
-  snappZu(ziel + schritt);   // 以已提交的整数为基准，连按不会因吸附动画在飞而走丢
+  // 步进在人数域：当前人数 ±schritt，再逆映射回滑块值；吸附校正把取整偏差沿单调方向修掉（至多一两步）
+  const n = clamp(Math.round(sichtbarAus(ziel)) + schritt, 1, leute.length);
+  let w = Math.round(clamp(sichtbarEin(n), 1, 500));
+  while (w < 500 && Math.round(sichtbarAus(w)) < n) w++;
+  while (w > 1 && Math.round(sichtbarAus(w)) > n) w--;
+  snappZu(w);   // 以已提交的整数为基准，连按不会因吸附动画在飞而走丢
 });
 
 andereEl?.addEventListener('click', () => {

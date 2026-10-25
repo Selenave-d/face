@@ -50,6 +50,11 @@ const SATZ_MITTE = [
   '画了一条很直的线', '踩着影子一路小跑', '在玻璃上写了名字', '安静看完一张报纸',
 ];
 const SATZ_ENDE = ['，引发围观。', '，场面一度十分可爱。', '，本报将持续关注。', '，目前纸面平静。'];
+// 全组合池 4×8×4=128 条：九行有放回独立抽取约 24.5% 种子出整行重复（生日悖论）——
+// 改从池里部分洗牌取前九，行必不重（与 merkmale 同款手法）
+const ZEILEN_ALLE = [];
+for (const a of SATZ_ANFANG) for (const m of SATZ_MITTE) for (const e of SATZ_ENDE)
+  ZEILEN_ALLE.push(`${a}，${m}${e}`);
 const LOHN = ['悬赏：水果糖叁颗', '悬赏：橡皮半块', '悬赏：贴纸两张', '酬谢：瓜子一把'];
 const STEMPEL = ['已核实', '独家', '寻人', '加急'];
 // 头版（双肖像）专用文案
@@ -94,8 +99,14 @@ function texte(seed) {
     datum: `19${40 + Math.floor(r.n() * 59)} 年 ${1 + Math.floor(r.n() * 12)} 月 ${1 + Math.floor(r.n() * 28)} 日`,
     ausgabe: `第 ${1 + Math.floor(r.n() * 998)} 期`,
     titel: r.pick(TITEL_FORM)(name),
-    zeilen: Array.from({ length: 9 }, () =>
-      `${r.pick(SATZ_ANFANG)}，${r.pick(SATZ_MITTE)}${r.pick(SATZ_ENDE)}`),
+    zeilen: (() => {
+      const wz = [...ZEILEN_ALLE];
+      for (let i = 0; i < 9; i++) {   // 部分洗牌前九步：九行互不相同
+        const j = i + Math.floor(r.n() * (wz.length - i));
+        [wz[i], wz[j]] = [wz[j], wz[i]];
+      }
+      return wz.slice(0, 9);
+    })(),
     lohn: r.pick(LOHN),
     stempel: r.pick(STEMPEL),
     name,
@@ -107,7 +118,10 @@ function texte(seed) {
     // 寻物版字段：同样全部独立 label 流；特征三条用部分洗牌（Fisher-Yates 前三步）保证不重
     verlorenTitel: strom(seed, 'vTitel').pick(VERLOREN_TITEL)(name),
     merkmale: (() => {
-      const r = strom(seed, 'merkmale'), w = [...MERKMALE];
+      const r = strom(seed, 'merkmale');
+      // 「常戴一顶帽子」只有胸像真戴帽才入池——特征要与肖像对得上（此前约 1/4 寻物版写着帽子配光头）
+      const hutAn = kopf && kopf.dna && kopf.dna.merkmale.kopfbedeckung === 'hut';
+      const w = MERKMALE.filter((m) => m !== '常戴一顶帽子' || hutAn);
       for (let i = 0; i < 3; i++) {
         const j = i + Math.floor(r.n() * (w.length - i));
         [w[i], w[j]] = [w[j], w[i]];

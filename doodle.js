@@ -198,7 +198,7 @@ function doodleRecipe(seed, erzwinge = {}) {
     mouth: { style: cM.pick(rM, 'style', [['wobble', 22], ['tiny', 18], ['smirk', 14], ['frown', 12], ['zigzag', 10], ['grit', 8], ['buckteeth', 8], ['stitch', 4], ['cat', 8], ['tongue', 6]]) },
     nose: { style: cN.pick(rN, 'style', [['none', 30], ['button', 28], ['line', 24], ['triangle', 18]]), size: cN.range(rN, 'size', .9, 1.2) },
     hair: { style: cH.pick(rH, 'style', [['bald', 12], ['bob', 13], ['messy', 12], ['spiky', 10], ['bowl', 10], ['curly', 9], ['buzz', 8], ['afro', 6], ['pigtails', 7], ['long', 5], ['buns', 4], ['topknot', 3], ['mohawk', 2], ['cowlick', 3]]) },
-    torso: { shape: dRng(seed, 'torso').pick([['bean', 40], ['round', 30], ['pear', 30]]) },
+    torso: { shape: dRng(seed, 'torso').wpick([['bean', 40], ['round', 30], ['pear', 30]]) },   // wpick 才返回名字——原 pick 等权取元素，值一直是 ['bean',40] 数组（死维度的根因）
     tail: { style: cT.pick(rT, 'style', [['none', 100]]) },
     extras: {
       spots: cX.chance(rX, 'spots', .06),
@@ -1123,21 +1123,34 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   // 尾巴在身体后面
   zeichneSchwanz(stift, rec, k, wag);
 
-  // 腿与脚：细棍
+  // 躯干幅面按 torso.shape 接线（此前掷了没人消费——熊永不圆身/梨永不梨；根因是
+  // 配方误用等权 pick，值一直是 ['bean',40] 数组，现改 wpick 返回名字）。
+  // round 分支取现状原值（30% 种子逐笔不变）；顶缘恒钉 −.54k（领口与下巴的纸白缝）
+  const TS = rec.torso.shape;
+  let brx = .26, bry = .21;
+  if (TS === 'bean') { brx = .225; bry = .228; }   // 瘦长：肩窄、躯干略长
+  if (TS === 'pear') { brx = .265; bry = .222; }   // 梨形：肩同宽，下半再外扩
+  const masse = { bear: 1.1, rabbit: .94 }[rec.art] ?? 1;   // 物种体型：熊壮、兔细
+  brx *= masse; bry *= Math.sqrt(masse);
+  const gliedW = 1.4 * (.8 + .2 * brx / .26);   // 肢宽随幅面：bean≈1.29 / round 1.4 / pear≈1.43（腿在前面消费，声明得在此）
+
+  // 腿与脚：细棍（肢宽与手臂同调幅面）
   for (const s of [-1, 1]) {
-    stift.line([[s * .1 * k, -.12 * k], [s * .13 * k, -.01 * k]], 1.4, { label: 170 + s });
-    stift.line([[s * .13 * k - (s > 0 ? .01 * k : -.01 * k), -.01 * k], [s * .19 * k, -.01 * k]], 1.4, { label: 172 + s });
+    stift.line([[s * .1 * k, -.12 * k], [s * .13 * k, -.01 * k]], gliedW, { label: 170 + s });
+    stift.line([[s * .13 * k - (s > 0 ? .01 * k : -.01 * k), -.01 * k], [s * .19 * k, -.01 * k]], gliedW, { label: 172 + s });
   }
-  // 身体：小椭圆（haut 原语决定深色/浅色/介质填法）。
-  // 中心 −.3→−.33：小头（s=.9）下巴与领口之间的纸白缝从约 6px 收到被描边吃掉
-  const koerper = kreisPts(0, -.33 * k, .26 * k, .21 * k, 18, .05, rec.seed + 11);
+  // 身体（顶缘钉 −.54k）
+  const kCy = -.54 * k + bry * k;
+  const koerper = kreisPts(0, kCy, brx * k, bry * k, 18, .05, rec.seed + 11);
+  if (TS === 'pear') for (const p of koerper) if (p[1] > kCy) p[0] *= 1.16;   // 下半外扩成梨
   stift.haut(koerper, torsoDark(rec), { k, winkel: -.55 });   // 身体排线与头错开角度，交叉出铜版画味
   stift.line(koerper, 1.5, { closed: true, label: 13 });
   if (rec.extras.scarf) zeichneSchal(stift, rec, k);
-  // 手臂：细棍下垂（根扎躯干轮廓内：.27/−.4 在椭圆外悬空约 5px，收到 .23/−.36）
+  // 手臂：细棍下垂（根扎躯干轮廓内：.88×brx 幅面联动，bean 窄肩也内切）
+  const armX = brx * .88 * k;
   for (const s of [-1, 1]) {
-    stift.line([[s * .23 * k, -.36 * k], [s * .36 * k, -.18 * k]], 1.4, { label: 174 + s });
-    stift.dot(s * .36 * k, -.17 * k, .028 * k, .7, 175 + s);
+    stift.line([[s * armX, -.36 * k], [s * .36 * k, -.18 * k]], gliedW, { label: 174 + s });
+    stift.dot(s * .36 * k, -.17 * k, .028 * (.8 + .2 * brx / .26) * k, .7, 175 + s);
   }
 
   // 头
