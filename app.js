@@ -1556,16 +1556,18 @@ function zeichneStraehnen(stift, dna, schale, ctx3d, pal, us, seed) {
   };
   us.forEach((u, i) => {
     if (!sichtbar(u)) return;
-    const hell = r.chance(.4);
+    // 发丝色按发色偏置（不再纯掷硬币）：深发多给亮丝、浅发多给墨丝——纯硬币下 80% 的深发上墨丝隐没、浅发上亮丝隐没
+    const hell = r.chance(pal.haarDunkel ? .75 : .15);
     stift.zug(strich(u, 0, 1), {
       spur: `straehne${i}`, w: .018, wackel: .002, farbe: hell ? pal.haut : pal.tinte,
-      deckung: hell ? .5 : .28, einlagig: true, ruhig: true,
+      deckung: hell ? (pal.haarDunkel ? .55 : .5) : .28, einlagig: true, ruhig: true,
     });
     if (r.n() > .72) return;
     const du = (r.chance(.5) ? -1 : 1) * r.range(.035, .085);
     if (sichtbar(u + du)) {
       stift.zug(strich(u + du, r.range(.06, .3), r.range(.72, .95)), {
-        spur: `straehne-d${i}`, w: .022, wackel: .002, farbe: pal.tinte, deckung: .68, spitz: .85, ruhig: true,
+        spur: `straehne-d${i}`, w: .022, wackel: .002,
+        farbe: pal.haarDunkel ? pal.haut : pal.tinte, deckung: pal.haarDunkel ? .55 : .68, spitz: .85, ruhig: true,
       });
     }
   });
@@ -2933,11 +2935,13 @@ const ctx = canvas.getContext('2d');
 let heads = [];
 let dpr = 1;
 let vergroessert = -1;   // 一墙脸模式：点一颗头放大居中（-1 = 整墙）
-let baseSeed = 1000;
-// ?seed=N 指定初始人 / 初始墙（分享与复现）；换人/换版后写回 URL
+let baseSeed = Math.floor(Math.random() * 1e9) + 1;   // 首访随机（恒 1000 时所有访客永远同一开屏角色）；+1 避开出 0
+// ?seed=N 指定初始人 / 初始墙（分享与复现）；无参数时把随机种子立即写回 URL——
+// 刷新角色不变、链接可分享（只随机不回写会变成每次刷新换人，与「换一个」按钮的种子语义打架）
 {
   const s = parseInt(new URLSearchParams(location.search).get('seed'), 10);
   if (Number.isFinite(s) && s > 0) baseSeed = s;
+  else { try { history.replaceState(null, '', '?seed=' + baseSeed); } catch (e) { /* file:// 可能拒绝：退化为每次刷新换新，可接受 */ } }
 }
 
 /* 纸纹：128px 的噪点 + 短划痕砖，平铺出纸面颗粒 */
@@ -3155,7 +3159,7 @@ function layout() {
   // 标题带与底部按钮带都从可用高度里显式扣除（原先只乘 .8，再扣带等于双重预留）；
   // 20 = 名字半字高 + 缝——高度项绑定时名字恒悬在按钮带上方
   const randOben = Math.max(innerHeight * .07, innerWidth < 720 ? 104 : 70);
-  const randUnten = innerWidth < 720 ? 72 : 53;      // 手机两行按钮带 / 桌面一行
+  const randUnten = innerWidth < 720 ? 96 : 53;      // 手机两行按钮带（44×2+gap+bottom≈104）/ 桌面一行
   head.mass = Math.max(1, Math.min((innerHeight - randOben - randUnten - 20) / span, innerWidth * .45 / (2 * bedarf.seite)));
   head.cx = innerWidth / 2;
   // 腾空 .85 计入锚点：跳到顶时帽尖恰好贴住上沿留边（对任意 DNA/帽子精确成立）

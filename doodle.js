@@ -249,7 +249,7 @@ const MEDIA = {
   // 马克笔：线宽 ×1.8、单遍少抖动、平涂高覆盖仍带一点透纸感
   marker: {
     farbe: '48,44,40', w: 1.8, passes: 1, jitter: .35, alpha: .88,
-    wash: .8, dunkelWash: .85,
+    wash: .8, dunkelWash: .65,   // .85→.65：两遍有效 .92→.775——深肤角色不再糊成近黑团，排线与轮廓在浅一档的底上重新分层（贴纸路径封顶 .6 不受影响）
   },
 };
 
@@ -993,20 +993,24 @@ function zeichneSchwanz(stift, rec, k, wag) {
   }
 }
 
-/* 围巾：脖处两道平行弧 + 一侧垂尾飘带。画在躯干后、头前——弧中段从下巴两侧露出 */
-function zeichneSchal(stift, rec, k) {
-  const b1 = bogenPts(0, -.52 * k, .21 * k, .05 * k, Math.PI * .1, Math.PI * .9, 8);
-  const b2 = bogenPts(0, -.485 * k, .21 * k, .05 * k, Math.PI * .12, Math.PI * .88, 8);
+/* 围巾：脖处两道平行弧 + 一侧垂尾飘带。画在躯干后、头前——弧中段从下巴两侧露出。
+ * 弧宽跟随躯干幅面（rx=brx×.7）：固定 .21k 是旧 round 幅面的肩宽——bean 窄肩上两端悬空、
+ * 熊·梨宽胸上整个埋进身体读成两道胸前短线 */
+function zeichneSchal(stift, rec, k, brx) {
+  const rx = (brx ?? .26) * .7 * k;
+  const b1 = bogenPts(0, -.52 * k, rx, .05 * k, Math.PI * .1, Math.PI * .9, 8);
+  const b2 = bogenPts(0, -.485 * k, rx, .05 * k, Math.PI * .12, Math.PI * .88, 8);
   if (stift.istWash) stift.tone(b1.concat([...b2].reverse()), { label: 180, k });   // 水彩/马克：带子给淡彩细节
   stift.line(b1, 1.5, { label: 181 });
   stift.line(b2, 1.4, { label: 182, alpha: .85 });
-  // 垂尾：从第二条弧的一端向躯干中部垂下的双飘线
+  // 垂尾：从第二条弧的一端向躯干中部垂下的双飘线（x 随幅面同调，窄肩不出轮廓）
   const sd = _h2(rec.seed, 29) % 2 ? 1 : -1;
+  const f = (brx ?? .26) / .26;
   for (let i = 0; i < 2; i++) {
     stift.line([
-      [sd * (.17 + i * .035) * k, -.47 * k],
-      [sd * (.13 + i * .05) * k, -.3 * k],
-      [sd * (.1 + i * .06) * k, -.24 * k - i * .02 * k],
+      [sd * (.17 + i * .035) * f * k, -.47 * k],
+      [sd * (.13 + i * .05) * f * k, -.3 * k],
+      [sd * (.1 + i * .06) * f * k, -.24 * k - i * .02 * k],
     ], 1.3, { label: 183 + i, alpha: .9 });
   }
 }
@@ -1145,7 +1149,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   if (TS === 'pear') for (const p of koerper) if (p[1] > kCy) p[0] *= 1.16;   // 下半外扩成梨
   stift.haut(koerper, torsoDark(rec), { k, winkel: -.55 });   // 身体排线与头错开角度，交叉出铜版画味
   stift.line(koerper, 1.5, { closed: true, label: 13 });
-  if (rec.extras.scarf) zeichneSchal(stift, rec, k);
+  if (rec.extras.scarf) zeichneSchal(stift, rec, k, brx);
   // 手臂：细棍下垂（根扎躯干轮廓内：.88×brx 幅面联动，bean 窄肩也内切）
   const armX = brx * .88 * k;
   for (const s of [-1, 1]) {
