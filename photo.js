@@ -131,6 +131,7 @@ const REQUISITEN = {
  * 30%~85%，不封顶则几乎每个 10 人架子都藏着一整窝。计数夹到 3：缺席维度最多
  * 凑出满堂红，四条/一整窝必须真有 5 个正向特征（过滤器+玩偶才是猎牌工具） */
 const MANGEL = { art: ['人'], kopf: ['无'], brille: ['无镜'], frisur: ['秃', '短'] };
+const TORSO_NAME = { bean: '豆', round: '圆', pear: '梨' };   // 体型不入判定维（三值维入判定必致一整窝通胀或零增量，已实测评估）——悬停名牌展示它的存在感
 
 /* 计分管线：牌型 → 橡皮升级 → 灯笼基础分 → 旗帜/喇叭倍率 → 汇总 */
 function besteHand(kinder, items = []) {
@@ -149,7 +150,10 @@ function besteHand(kinder, items = []) {
     // 有任何真重复时照旧注入（玩偶一对→三条的猎牌功能完整保留）。21 行的满窝封顶语义不动
     const alleVerschieden = new Set(werte).size === kinder.length;
     for (const ex of extras) if (ex.dim === dim && !alleVerschieden) zaehl[ex.value] = (zaehl[ex.value] || 0) + ex.n;
-    for (const v in zaehl) if (zaehl[v] > 3 && MANGEL[dim]?.includes(v)) zaehl[v] = 3;   // 缺席大桶最多按三条计
+    // 缺席大桶最多按三条计；brille 例外按一对计——眼镜维只有 2 值，5 人鸽笼必出 (≥3,≤2)，
+    // 封 3 时 brille 恒 ≥ 三条、一对/两对结构性不可达（征集令 11% 死任务、橡皮死道具、
+    // 年鉴 7/7 毕业永不触发），封 2 让低牌在「全班几乎无镜」时重新打得出来
+    for (const v in zaehl) if (zaehl[v] > 3 && MANGEL[dim]?.includes(v)) zaehl[v] = dim === 'brille' ? 2 : 3;
     const [name, basis, mult, info] = musterAusZaehl(zaehl);
     const punkte = (basis + kinder.length * 10) * mult;
     if (!best || punkte > best.punkte) best = { name, basis, mult, dim, punkte, info, ohneEx: alleVerschieden };
@@ -342,12 +346,14 @@ canvas.addEventListener('pointerdown', (e) => {
   }, 400);
 });
 // 指针挪出 ~10px 视为拖动/改主意：取消长按——否则滑到别的孩子身上 0.4s 后仍会戳中先按住的那个
+let hoverKind = null;   // 悬停的孩子：名牌下补一行「物种·体型身」小注
 canvas.addEventListener('pointermove', (e) => {
   if (druckTimer && Math.hypot(e.clientX - druckX, e.clientY - druckY) > 10) druckEnde();
+  hoverKind = phase === 'idle' ? kindBei(e.clientX, e.clientY) : null;
 }, { passive: true });
 const druckEnde = () => clearTimeout(druckTimer);
 canvas.addEventListener('pointerup', druckEnde, { passive: true });
-canvas.addEventListener('pointerleave', druckEnde, { passive: true });
+canvas.addEventListener('pointerleave', () => { druckEnde(); hoverKind = null; }, { passive: true });
 canvas.addEventListener('pointercancel', druckEnde, { passive: true });
 
 /* ================= 拍合影过场 ================= */
@@ -737,6 +743,12 @@ function zeichneName(kind) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#8b8894';
   ctx.fillText(kind.name, kind.x, kind.nameY);
+  if (kind === hoverKind && phase === 'idle') {   // 悬停小注：体型维的展示出口（不入判定的替代）
+    ctx.font = `10px "Kaiti", "STKaiti", "楷体", serif`;
+    try { ctx.letterSpacing = '1px'; } catch (e) { /* 旧浏览器忽略 */ }
+    ctx.fillStyle = '#a89f93';
+    ctx.fillText(`${ART_NAME[kind.rec.art]}·${TORSO_NAME[kind.rec.torso.shape]}身`, kind.x, kind.nameY + 14);
+  }
   ctx.restore();
 }
 
