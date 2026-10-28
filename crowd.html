@@ -6,19 +6,10 @@
   <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#f6f3ed">
 <title>纸上的小人 · 一群朋友</title>
+<link rel="stylesheet" href="stil.css">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f6f3ed; }
   canvas { display: block; }
-  #titel {
-    position: fixed; top: 30px; left: 34px; transform: rotate(-2.5deg);
-    font: 19px/1.9 "Courier New", ui-monospace, monospace; color: #3a3440;
-    user-select: none; pointer-events: none; white-space: nowrap;
-  }
-  #titel mark {
-    background: #2e2839; color: #f6f2ea; padding: 2px 9px;
-    display: inline-block; transform: rotate(1.4deg);
-  }
-  #titel mark:last-of-type { transform: rotate(-1.1deg); }
   #zaehler {
     position: fixed; top: 76px; left: 36px; transform: rotate(-2.5deg);
     font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px; color: #a89f93;
@@ -26,14 +17,6 @@
   }
   /* 满 500 庆祝时计数器换上全项目唯一的那点暖橘红（与剪报印章同源） */
   #zaehler.voll { color: #b0654a; }
-  .sprung {
-    position: fixed; top: 34px; right: 34px;
-    display: flex; gap: 18px;
-    font: 12px/1.7 "Courier New", monospace; letter-spacing: 2px;
-    user-select: none;
-  }
-  .sprung a { color: #a89f93; text-decoration: none; }
-  .sprung a:hover { color: #2b2320; }
   #schieber {
     position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%);
     width: min(560px, calc(100vw - 56px)); height: 52px;
@@ -42,9 +25,6 @@
   }
   #schieber:focus-visible {
     outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 14px;
-  }
-  button:focus-visible, a:focus-visible {
-    outline: 1.5px dashed #c9c1b5; outline-offset: 8px; border-radius: 999px;
   }
   #andere {
     position: fixed; right: 34px; bottom: 48px;
@@ -63,8 +43,6 @@
     .sprung { top: 90px; left: 16px; right: auto; flex-wrap: wrap; gap: 4px 14px; font-size: 10px; letter-spacing: 1px; }
     .sprung a { padding: 2px 0; }
   }
-  /* 窄桌面窗口（720~759）：导航收紧间距，别咬到不换行标题的尾巴 */
-  @media (min-width: 720px) and (max-width: 759px) { .sprung { gap: 10px; } }
 </style>
 </head>
 <body data-modus="crowd">
