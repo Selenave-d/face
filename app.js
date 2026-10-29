@@ -581,8 +581,9 @@ const GESICHT_FORMEN = {
   boese: { braue: 'schraeg', mund: 'zickzack' },
   traurig: { braue: 'sorge', mund: 'welle' },
   muede: { auge: 'schlaefrig' },
+  staune: { auge: 'weit', mund: 'offen', braue: 'hoch' },   // 惊：瞪眼缩瞳 + 小张嘴 + 高挑眉——三件都是现成变体的组合，零新绘制
 };
-const GESICHT_FOLGE = ['', 'froh', 'boese', 'traurig', 'muede'];   // 循环顺序：日常→笑→怒→难过→困
+const GESICHT_FOLGE = ['', 'froh', 'boese', 'traurig', 'muede', 'staune'];   // 循环顺序：日常→笑→怒→难过→困→惊
 const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2], ['schal', .7]];
 const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4], ['muttermal', 1]];
 const ZIERRAT_W = [['keiner', 7], ['ohrring', 1.2], ['pflaster', .8]];
@@ -2904,9 +2905,9 @@ function drawHead(ctx, head, t) {
   // 名字：楷体、浅灰墨（单人落在脚下，一墙脸/合影/一群人在脚下小字；zeigeName 可整体关掉）
   if (head.zeigeName !== false) {
     ctx.save();
-    ctx.font = (WAND || FOTO || CROWD)
+    ctx.font = ((WAND && vergroessert < 0) || FOTO || CROWD)
       ? `13px "Kaiti", "STKaiti", "楷体", serif`
-      : `${Math.round(clamp(mass * .26, 18, 34))}px "Kaiti", "STKaiti", "楷体", serif`;
+      : `${Math.round(clamp(mass * .26, 18, 34))}px "Kaiti", "STKaiti", "楷体", serif`;   // 放大态走 mass 分支：巨幅胸像脚下不再挂 13px 墙字号小字（墙网格的名字由 frame 精灵外单画）
     try { ctx.letterSpacing = '2px'; } catch (e) { /* 旧浏览器忽略 */ }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -2935,6 +2936,8 @@ const ctx = canvas.getContext('2d');
 let heads = [];
 let dpr = 1;
 let vergroessert = -1;   // 一墙脸模式：点一颗头放大居中（-1 = 整墙）
+let wahl = -1;           // 墙态键盘选中索引（-1 无）——复用 hover 3% 缓放反馈，Enter 进入放大（与点击同款）
+let wandCols = 2;        // layout 时回填的墙列数，供上下键换行
 let baseSeed = Math.floor(Math.random() * 1e9) + 1;   // 首访随机（恒 1000 时所有访客永远同一开屏角色）；+1 避开出 0
 // ?seed=N 指定初始人 / 初始墙（分享与复现）；无参数时把随机种子立即写回 URL——
 // 刷新角色不变、链接可分享（只随机不回写会变成每次刷新换人，与「换一个」按钮的种子语义打架）
@@ -3124,6 +3127,8 @@ function layout() {
     const count = cols * rows;
     while (heads.length < count) heads.push(new Head(baseSeed + heads.length));
     heads.length = count;
+    wandCols = cols;   // 键盘上下键换行用（行主序网格与视觉一致）
+    if (wahl >= heads.length) wahl = heads.length - 1;   // 窗口缩档：选中索引跟随截断
     // 放大态下窗口缩档把截断线压到放大索引之下时，放大目标已不存在——退回整墙
     if (vergroessert >= count) vergroessert = -1;
     const gw = innerWidth / cols;
@@ -3170,6 +3175,7 @@ function layout() {
 function reshuffle() {
   baseSeed = Math.floor(Math.random() * 1e9);
   vergroessert = -1;   // 换版回整墙（放大索引指向的头已不存在）
+  wahl = -1;   // 头全换，键盘选中作废
   if (!WAND) wechselT = performance.now() / 1000;   // 单人页：新人落纸弹一下；整墙换版保持安静
   heads = [];
   layout();
@@ -3249,17 +3255,35 @@ if (!WAND && !FOTO && !CROWD && !CLIP && !AVATAR) addEventListener('keydown', (e
 // 一墙脸 · 放大视图：1-5 直选表情（1 复原/2 笑/3 怒/4 难过/5 困），与头像页按钮同一套心智；
 // Escape 退出放大回整墙（退出时清表情，整墙是中性合影）
 if (WAND) addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Escape' && vergroessert >= 0) {
     heads[vergroessert].gesicht = null;
     vergroessert = -1;
     layout();
     return;
   }
-  if (vergroessert < 0 || e.ctrlKey || e.metaKey || e.altKey) return;
-  const i = '12345'.indexOf(e.key);
-  if (i < 0) return;
-  const g = GESICHT_FOLGE[i];
-  heads[vergroessert].gesicht = g ? GESICHT_FORMEN[g] : null;
+  if (vergroessert >= 0) {
+    if (e.repeat) return;
+    const i = '123456'.indexOf(e.key);   // 1 复原 / 2 笑 / 3 怒 / 4 难过 / 5 困 / 6 惊
+    if (i < 0) return;
+    const g = GESICHT_FOLGE[i];
+    heads[vergroessert].gesicht = g ? GESICHT_FORMEN[g] : null;
+    return;
+  }
+  // 墙态键盘导航：方向键在网格上移动选中（复用悬停缓放反馈），Enter 进入放大（与点击同款）
+  const n = heads.length;
+  if (!n) return;
+  if (e.key === 'ArrowRight') wahl = Math.min(n - 1, Math.max(0, wahl) + 1);
+  else if (e.key === 'ArrowLeft') wahl = Math.max(0, (wahl < 0 ? n : wahl) - 1);   // 未选时 Left 落到最后一颗
+  else if (e.key === 'ArrowDown') wahl = Math.min(n - 1, wahl < 0 ? 0 : wahl + wandCols);
+  else if (e.key === 'ArrowUp') wahl = Math.max(0, wahl - wandCols);
+  else if (e.key === 'Enter' && wahl >= 0) {
+    vergroessert = wahl;
+    heads[wahl].gesicht = null;
+    layout();
+    return;
+  } else return;
+  e.preventDefault();   // 方向键不滚动（overflow:hidden 下属例行保险）
 });
 
 // foto / crowd 模式到这里为止：纸纹与 papierSchnell() 留用，排版与主循环交给 photo.js / crowd.js
@@ -3363,6 +3387,8 @@ function frame(now) {
       const d = Math.hypot(pointer.x - h.cx, pointer.y - h.cy) / h.mass;
       if (d < bestD) { bestD = d; hoverIdx = i; }
     });
+  } else if (WAND && vergroessert < 0 && wahl >= 0 && wahl < heads.length) {
+    hoverIdx = wahl;   // 键盘选中复用悬停缓放反馈（纯键盘时 pointer.active 为 false）
   }
   canvas.style.cursor = hoverIdx >= 0 ? 'pointer' : 'crosshair';
   zuZeichnen.forEach((head, i) => {

@@ -117,8 +117,10 @@ function avatarPNG() {
   const cx0 = kopf.cx, cy0 = kopf.cy, mass0 = kopf.mass;
   const blinz0 = kopf.blinzeltBis, plapp0 = kopf.plappertBis;
   const yaw0 = kopf.yaw, gesicht0 = kopf.gesicht ?? null;
+  const blickX0 = kopf.blickX, blickY0 = kopf.blickY;
   kopf.blinzeltBis = 0; kopf.plappertBis = 0;   // 快照不拍眨眼/嘟嘴的瞬间
   kopf.yaw = 0; kopf.gesicht = null;            // 也拍正面：锁「看左」或挂笑时导出不该是侧脸/表情照
+  kopf.blickX = 0; kopf.blickY = 0;             // 视线也回中：锁看左/右时瞳孔不再斜视入照
   kopf.mass = PX / (bedarf.oben + 2.25);
   kopf.cx = PX / 2;
   kopf.cy = bedarf.oben * kopf.mass + PX * .07;
@@ -126,6 +128,7 @@ function avatarPNG() {
   kopf.cx = cx0; kopf.cy = cy0; kopf.mass = mass0;
   kopf.blinzeltBis = blinz0; kopf.plappertBis = plapp0;
   kopf.yaw = yaw0; kopf.gesicht = gesicht0;
+  kopf.blickX = blickX0; kopf.blickY = blickY0;
   kopf.cache.stift = null; kopf.cache.stiftTick = -1; kopf.cache.stiftMass = -1;
   return out.toDataURL('image/png');
 }
