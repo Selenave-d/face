@@ -3264,6 +3264,16 @@ if (WAND) addEventListener('keydown', (e) => {
   }
   if (vergroessert >= 0) {
     if (e.repeat) return;
+    // 放大态翻墙：左右键切上/下一颗头（clamp 到端头不绕圈；墙态导航分支只在 vergroessert<0 可达，无冲突）
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      heads[vergroessert].gesicht = null;   // 离场清表情（同 Escape 的整墙中性规矩）
+      vergroessert = Math.min(heads.length - 1, Math.max(0, vergroessert + (e.key === 'ArrowRight' ? 1 : -1)));
+      heads[vergroessert].gesicht = null;   // 防御：进场也清
+      wahl = vergroessert;   // 回整墙时高亮停在最后看的那颗
+      layout();   // 放大布局只摆当前头，不调 layout 新头还挂着墙上的小坐标
+      e.preventDefault();
+      return;
+    }
     const i = '123456'.indexOf(e.key);   // 1 复原 / 2 笑 / 3 怒 / 4 难过 / 5 困 / 6 惊
     if (i < 0) return;
     const g = GESICHT_FOLGE[i];
@@ -3307,11 +3317,17 @@ function bodenZeichnen(t, head) {
   const schrumpf = 1 - Math.min(.8, Math.max(0, -pose.dy)) * .7;   // 跳起时影子收窄变淡
   const fx = head.cx + pose.dx * head.mass;                        // 影子跟脚走
   const bodenY = head.nameY - head.mass * .45 + head.mass * .08;
-  // 地面线：脚下一短横（地面不随跳跃移动）
+  // 地面线：脚下一短横（地面不随跳跃移动）；跳舞时中点随 bounce 下凹（.8px 封顶，两端轻跟 .35）
+  // ——地板被踩得咚咚响；12fps 量化相位与脚同帧，min(1,dt/.25) 让切动作时颠簸渐入而非硬跳
+  let boing = 0;
+  if (head.akName === 'dance') {
+    const qq = Math.floor((t - head.akSeit) * 12) / 12;
+    boing = Math.abs(Math.sin(qq / 1.9 * TAU * 2)) * .8 * Math.min(1, (t - head.akSeit) / .25);
+  }
   bodenStiftEinz.zug([
-    { x: fx - 1.15 * head.mass, y: bodenY },
-    { x: fx, y: bodenY + .02 * head.mass },
-    { x: fx + 1.15 * head.mass, y: bodenY },
+    { x: fx - 1.15 * head.mass, y: bodenY + .35 * boing },
+    { x: fx, y: bodenY + .02 * head.mass + boing },
+    { x: fx + 1.15 * head.mass, y: bodenY + .35 * boing },
   ], { spur: 'bodenlinie', w: 1.4, deckung: .45, eckig: true });
   for (let f = 0; f < 3; f++) {
     const fo = (f - 1) * .12;
@@ -3338,6 +3354,22 @@ function bodenZeichnen(t, head) {
         { x: fx + dir * .16 * head.mass, y: bodenY + 2 },
         { x: fx + dir * (.34 + .18 * land) * head.mass, y: bodenY + 4 },
       ], { spur: `splatstrich${nr}.${dir}`, w: 1, deckung: .3 * land, eckig: true });
+    }
+  }
+  // 走路脚印：每脚一枚椭圆印、触地起渐隐（原地踏步，多步队列会叠在同一处堆墨——
+  // 只留"一浓一淡"两枚共存）。步序 nr 编进笔标签防闪（同 splash 的套路），纯 t 的确定函数零状态
+  if (head.akName === 'walk') {
+    const U = (t - head.akSeit) / 1.15;
+    for (let i = 0; i < 2; i++) {
+      const u = U + i * .5 + .5;   // 触地瞬间对齐取整（i=0 在 g=.5、i=1 在 g=0 落地）
+      const nr = Math.floor(u);
+      const alter = u - nr;   // 触地年龄 0→1
+      const alpha = Math.max(0, 1 - alter * 1.4);   // 淡出拉到 ~71% 周期：新印旁还留上一枚残影
+      if (alpha <= .05) continue;
+      bodenStiftEinz.punkt(
+        { x: fx + (i ? 1 : -1) * .15 * head.mass, y: bodenY + 2 },
+        Math.max(1.1, head.mass * .028), BODEN_TINTE,
+        { spur: `tritt${nr}.${i}`, deckung: .5 * alpha, streck: 1.7, dreh: (i ? 1 : -1) * .5 });
     }
   }
 }

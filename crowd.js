@@ -234,7 +234,12 @@ canvas.addEventListener('click', (e) => {
     const d = Math.hypot(dx, dy);
     if (d < 1 && d < bestD) { bestD = d; best = i; }
   }
-  if (best >= 0) leute[best].setAktion('wave', performance.now() / 1000, AKTIONEN.wave.periode);
+  if (best >= 0) {
+    const jetzt = performance.now() / 1000;
+    // 连点节流（同单人页 waehleAktion 规则）：0.25s 过渡期内重复点同一人会把挥手起手反复重掷、冻在插值半路
+    if (!(leute[best].akName === 'wave' && jetzt - leute[best].akSeit < .25))
+      leute[best].setAktion('wave', jetzt, AKTIONEN.wave.periode);
+  }
 });
 
 function schieberZeichnen(t) {

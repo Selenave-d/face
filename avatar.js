@@ -262,8 +262,9 @@ document.getElementById('speicher').addEventListener('click', () => {
   a.href = url;
   a.download = `papier-avatar-${saat}.png`;
   a.click();
-  // 反馈：舞台盖「存」章 + 按钮短促变字（连点防抖：只还原最后一次）
-  stempelBis = performance.now() / 1000 + 1.2;
+  // 反馈：舞台盖「存」章 + 按钮短促变字（连点防抖：只还原最后一次）；
+  // 章顺延不重置——淡出到一半再点不会瞬间弹大复原
+  stempelBis = Math.max(stempelBis, performance.now() / 1000 + 1.2);
   const btn = document.getElementById('speicher');
   btn.textContent = '已 存 下';
   clearTimeout(speicherTextZurueck);
@@ -271,7 +272,7 @@ document.getElementById('speicher').addEventListener('click', () => {
 });
 
 // 逗它：按钮触发（表情/视线为开关，主按钮样式的「回神」清空），点画布随机来一个
-const GESTEN = ['sprich', 'blinz', 'froh', 'boese', 'traurig', 'muede', 'links', 'rechts'];
+const GESTEN = ['sprich', 'blinz', 'froh', 'boese', 'traurig', 'muede', 'staune', 'links', 'rechts'];   // staune 第六表情同步进点画布随机手势
 const gesichtKnopfListe = [...document.querySelectorAll('#gesichte button')];
 gesichtKnopfListe.forEach((b) => {
   b.addEventListener('click', () => gesichtAktion(b.dataset.g));
