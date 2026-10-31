@@ -1047,6 +1047,10 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
   const x = rec.extras;
   const cy = -.95 * k;
   const R = .44 * rec.skull.s * k;
+  // 泪滴形原语（尖朝上圆肚朝下）：哭的眼下泪与怕的太阳穴汗共用
+  const tropfen = (tx2, ty, g, label, alpha) => {
+    stift.line([[tx2, ty + g], [tx2 - g * .4, ty + g * .35], [tx2, ty], [tx2 + g * .4, ty + g * .35]], 1.1, { closed: true, label, alpha });
+  };
   if (x.freckles) {
     for (const s of [-1, 1]) {
       const r = _mb(_h2(rec.seed, 43 + s));
@@ -1086,11 +1090,14 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
     // 会切进 R*.45 处的泪滴（吻半宽最大 .32k > .45R≈.2k）
     const tx = rec.skull.muzzle > 0 ? R * .8 : R * .45;
     const ey = -.98 * k;
-    const tropfen = (tx2, ty, g, label, alpha) => {
-      stift.line([[tx2, ty + g], [tx2 - g * .4, ty + g * .35], [tx2, ty], [tx2 + g * .4, ty + g * .35]], 1.1, { closed: true, label, alpha });
-    };
     tropfen(tx, ey + .12 * k, .07 * k, 163, .75);
     if (face === 'weint') tropfen(-tx, ey + .14 * k, .09 * k, 164, .8);
+  }
+  // 怕出一滴太阳穴汗：复用泪滴形，钉在颅缘内（kopfPoly 抖 ±3%，.92 不出界）、
+  // 眼上外角——与眼下的泪不同位不撞车；随笔沸腾微颤是白送的
+  if (face === 'angst') {
+    const RX = .44 * rec.skull.wf * rec.skull.s * k * (rec.skull.shape === 'wide' ? 1.14 : 1);
+    tropfen(RX * .92, -1.1 * k, .055 * k, 165, .7);
   }
 }
 

@@ -151,6 +151,7 @@ function blattGeometrie() {
 let uiStift = null, uiTick = -1;
 let txMemo = { seed: -1, tx: null };          // 文案按种子记忆：不每帧重掷
 let blattMemo = null;   // 整页记忆：{ cv, key, bx, by, bw, bh }——bx/by 为该记忆区在主画布设备像素坐标里的左上角，bw/bh 为 memo 的设备像素尺寸（miss 帧从主画布 1:1 截取，存图导出按同一坐标系换算）
+let stempelOrt = null;  // 印章落点 { ax, ay, text }：miss 帧由版式函数记账（章不入底片，overlay 每帧盖）
 let rissMemo = { key: '', pts: null };        // 撕纸边多边形同理（只随种子与尺寸变）
 let fleckMemo = { saat: -1, list: null };     // 陈年锈斑同理（只随种子变；位置存纸面分数，resize 重投影）
 
@@ -338,12 +339,13 @@ function gestrichelt(s, x, y, bw, bh, spur, pitch, anteil = .6) {
   }
 }
 
-function stempel(tx, W, ax, ay, text) {
-  // 朱红印章：压在标题右端，双框 + 楷体，微微歪
+function stempel(tx, W, ax, ay, text, k = 1) {
+  // 朱红印章：压在标题右端，双框 + 楷体，微微歪；k=1.18→1 是落章的「啪」手感（overlay 用）
   ctx.save();
   const stW = W * .14, stH = W * .1;
   ctx.translate(ax, ay);
   ctx.rotate(-.12);
+  ctx.scale(k, k);
   ctx.strokeStyle = STEMPEL_ROT;
   ctx.lineWidth = 2.2;
   ctx.globalAlpha = .8;
@@ -407,7 +409,7 @@ function zeichneSucht(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .13);
   falte(s, P, W, Q + H * .58);
-  stempel(tx, W, P + W - p - W * .077, Q + p + W * .225);   // .225：章顶避开报头双细线第二根（.21 在窄屏笔宽占比大时会蹭线）
+  stempelOrt = { ax: P + W - p - W * .077, ay: Q + p + W * .225, text: tx.stempel };   // 只记账：章走 overlay 落章动画，不入底片（.225 避双细线）
 }
 
 /* —— 版式二 · 头版：通栏大标题 + 并排两帧小肖像（第二张脸 saat+1013） —— */
@@ -473,7 +475,7 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, rahmenY + boxH + W * .115);
   falte(s, P, W, Q + H * .47);   // 头版折痕压在两帧肖像的胸口带（避开框底的肩块裁切线）
-  stempel(tx, W, P + W - p - W * .077, Q + p + W * .215, tx.duoStempel);
+  stempelOrt = { ax: P + W - p - W * .077, ay: Q + p + W * .215, text: tx.duoStempel };
 }
 
 /* —— 版式三 · 寻物启事：左上失物缩略照（虚线框）+ 右侧特征三条与目击地点 —— */
@@ -537,7 +539,7 @@ function zeichneVerloren(t, s, tx, P, Q, W, H, p) {
 
   spalten(s, tx, P, Q, W, H, p, boxY + boxH + W * .115);
   falte(s, P, W, Q + H * .44);   // 折痕压在小肖像胸口带（框高 73% 处，避开框底虚线）
-  stempel(tx, W, P + W - p - W * .077, Q + p + W * .225, tx.verlorenStempel);   // 同 sucht：.225 避双细线
+  stempelOrt = { ax: P + W - p - W * .077, ay: Q + p + W * .225, text: tx.verlorenStempel };   // 同 sucht
 }
 
 /* ================= 主循环与按钮 ================= */
@@ -581,8 +583,9 @@ function rahmen(now) {
   const key = `${Math.floor(t * 8 * schnell)}|${schnell}|${saat}|${geo}`;
   const wE = Math.min(1, Math.max(0, (t - wechselZeit) / .3));
   if (!blattMemo || blattMemo.key !== key) {
-    zeichneBlatt(t);   // 恒 1 倍画在主画布（不带换纸缩放）
+    zeichneBlatt(t);   // 恒 1 倍画在主画布（不带换纸缩放）；stempel 只记账不画——底片干净
     blattMemo = erfasseBlatt(key, g);
+    stempelUeber(t, g);
     if (wE >= 1) { requestAnimationFrame(rahmen); return; }   // 稳定态：主画布已是成品，下帧起整张贴回
     papierSchnell();   // 过场：盖掉无缩放底稿，再贴缩放图
   }
@@ -594,7 +597,17 @@ function rahmen(now) {
   ctx.translate(-mx, -my);
   ctx.drawImage(blattMemo.cv, blattMemo.bx / dpr, blattMemo.by / dpr, blattMemo.bw / dpr, blattMemo.bh / dpr);
   ctx.restore();
+  stempelUeber(t, g);
   requestAnimationFrame(rahmen);
+}
+
+/* 印章 overlay：画在整页记忆之上——换纸落定（wechselZeit+0.3s）后 0.15s 从 1.18 倍缩到 1，
+ * 纸先落、章后「啪」（avatar 存档章同款手感）。首载 wechselZeit=-9，u 恒 1 → 静态章，无需特判 */
+function stempelUeber(t, g) {
+  if (!stempelOrt) return;
+  const u = Math.min(1, Math.max(0, (t - wechselZeit - .3) / .15));
+  if (u <= 0) return;
+  stempel(null, g.w, stempelOrt.ax, stempelOrt.ay, stempelOrt.text, 1 + (1 - u) * .18);
 }
 
 function resize() {
@@ -636,6 +649,12 @@ document.getElementById('speicher').addEventListener('click', () => {
   out.height = Math.round(sh * 2 / dpr);
   const oc = out.getContext('2d');
   oc.drawImage(m.cv, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  // 补章：章不入底片，导出在 out 画布上以 CSS 坐标系补画一次静态章（输出 = 源 × 2/dpr，换算回 memo 基准）
+  if (stempelOrt) {
+    oc.setTransform(2 / dpr, 0, 0, 2 / dpr, -m.bx * 2 / dpr, -m.by * 2 / dpr);
+    stempel(null, g.w, stempelOrt.ax, stempelOrt.ay, stempelOrt.text, 1);
+    oc.setTransform(1, 0, 0, 1, 0, 0);
+  }
   out.toBlob((blob) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

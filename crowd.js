@@ -360,6 +360,26 @@ function feierTick(t) {
   }
 }
 
+/* 低人数随机小动作：滑块 ≤5 人时每 4~9s 给一个站定的可见朋友来一个小动作（挥手为主、
+ * 偶尔跳/踏步）——稀疏人群不再是雕像墙。app.js 的自动动作门对 CROWD 整页关着（怕 48 人互挤），
+ * 这里自设节流只挑可见站定者，精灵键含 akName 自动失效重画，akBis 到点自动回 stand */
+let kleinBei = 0;
+function kleinTick(t) {
+  const sicht = sichtbarAus(wert);
+  if (feier || sicht > 5.5 || ziehe) { kleinBei = t + 3; return; }   // 满编庆祝/人多大编/拖滑块时停掷并防积压
+  if (t < kleinBei) return;
+  kleinBei = t + 4 + Math.random() * 5;
+  const kand = [];
+  for (let i = 0; i < plaetze.length; i++) {
+    const p = plaetze[i], h = leute[i];
+    if (clamp(sicht - p.rang, 0, 1) >= 1 && h.akName === 'stand' && !h.akVon) kand.push(h);
+  }
+  if (!kand.length) return;
+  const r = Math.random();
+  const name = r < .55 ? 'wave' : r < .85 ? 'jump' : 'walk';
+  kand[(Math.random() * kand.length) | 0].setAktion(name, t, AKTIONEN[name].periode);
+}
+
 let knallStift = null, knallTick = -1;
 
 function raketenZeichnen(t) {
@@ -451,6 +471,7 @@ function rahmen(now) {
 
   papierSchnell();
   feierTick(t);
+  kleinTick(t);
 
   // 地面线：比最前排的脚再低几像素，画在人群后面，身体自然盖住脚后的线
   const bt = Math.floor(t * 8);
