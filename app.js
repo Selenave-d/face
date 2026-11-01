@@ -2937,6 +2937,7 @@ let heads = [];
 let dpr = 1;
 let vergroessert = -1;   // 一墙脸模式：点一颗头放大居中（-1 = 整墙）
 let wahl = -1;           // 墙态键盘选中索引（-1 无）——复用 hover 3% 缓放反馈，Enter 进入放大（与点击同款）
+let wahlT = 0;            // 上次墙态方向键生效时刻（repeat 节流：τ≈100ms 的 hoverA 缓放追得上）
 let wandCols = 2;        // layout 时回填的墙列数，供上下键换行
 let baseSeed = Math.floor(Math.random() * 1e9) + 1;   // 首访随机（恒 1000 时所有访客永远同一开屏角色）；+1 避开出 0
 // ?seed=N 指定初始人 / 初始墙（分享与复现）；无参数时把随机种子立即写回 URL——
@@ -3266,8 +3267,10 @@ if (WAND) addEventListener('keydown', (e) => {
     if (e.repeat) return;
     // 放大态翻墙：左右键切上/下一颗头（clamp 到端头不绕圈；墙态导航分支只在 vergroessert<0 可达，无冲突）
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const neu = Math.min(heads.length - 1, Math.max(0, vergroessert + (e.key === 'ArrowRight' ? 1 : -1)));
+      if (neu === vergroessert) { e.preventDefault(); return; }   // 端头 clamp 后不动：不清表情、不重排（按了没反应但表情没了的老毛病）
       heads[vergroessert].gesicht = null;   // 离场清表情（同 Escape 的整墙中性规矩）
-      vergroessert = Math.min(heads.length - 1, Math.max(0, vergroessert + (e.key === 'ArrowRight' ? 1 : -1)));
+      vergroessert = neu;
       heads[vergroessert].gesicht = null;   // 防御：进场也清
       wahl = vergroessert;   // 回整墙时高亮停在最后看的那颗
       layout();   // 放大布局只摆当前头，不调 layout 新头还挂着墙上的小坐标
@@ -3283,6 +3286,12 @@ if (WAND) addEventListener('keydown', (e) => {
   // 墙态键盘导航：方向键在网格上移动选中（复用悬停缓放反馈），Enter 进入放大（与点击同款）
   const n = heads.length;
   if (!n) return;
+  // repeat 节流 .12s（首按不拦）：按住扫墙保留，速率降到 hoverA 缓放（τ≈100ms）追得上的档位
+  if (e.key.startsWith('Arrow')) {
+    const jetzt = performance.now() / 1000;
+    if (e.repeat && jetzt - wahlT < .12) { e.preventDefault(); return; }
+    wahlT = jetzt;
+  }
   if (e.key === 'ArrowRight') wahl = Math.min(n - 1, Math.max(0, wahl) + 1);
   else if (e.key === 'ArrowLeft') wahl = Math.max(0, (wahl < 0 ? n : wahl) - 1);   // 未选时 Left 落到最后一颗
   else if (e.key === 'ArrowDown') wahl = Math.min(n - 1, wahl < 0 ? 0 : wahl + wandCols);
@@ -3317,12 +3326,14 @@ function bodenZeichnen(t, head) {
   const schrumpf = 1 - Math.min(.8, Math.max(0, -pose.dy)) * .7;   // 跳起时影子收窄变淡
   const fx = head.cx + pose.dx * head.mass;                        // 影子跟脚走
   const bodenY = head.nameY - head.mass * .45 + head.mass * .08;
+  // 地面特效的统一量化钟：与 motionPose 同式（floor(dt*12)/12）——姿态每 83ms 换帧，
+  // 特效 alpha 与笔标签翻号也钉在帧边界（半帧重掷形状/超前触地的老毛病一并消除）
+  const qt = Math.floor((t - head.akSeit) * 12) / 12;
   // 地面线：脚下一短横（地面不随跳跃移动）；跳舞时中点随 bounce 下凹（.8px 封顶，两端轻跟 .35）
   // ——地板被踩得咚咚响；12fps 量化相位与脚同帧，min(1,dt/.25) 让切动作时颠簸渐入而非硬跳
   let boing = 0;
   if (head.akName === 'dance') {
-    const qq = Math.floor((t - head.akSeit) * 12) / 12;
-    boing = Math.abs(Math.sin(qq / 1.9 * TAU * 2)) * .8 * Math.min(1, (t - head.akSeit) / .25);
+    boing = Math.abs(Math.sin(qt / 1.9 * TAU * 2)) * .8 * Math.min(1, (t - head.akSeit) / .25);
   }
   bodenStiftEinz.zug([
     { x: fx - 1.15 * head.mass, y: bodenY + .35 * boing },
@@ -3339,10 +3350,10 @@ function bodenZeichnen(t, head) {
   // 落地溅墨：land 相在脚边洒三粒墨点加两道短排线——落地有声。落地序号编进笔标签：
   // 同一次落地内稳定（punkt 噪声与 tick 无关），下一跳重掷。相位门控排除下蹲相（它的 dy 也会 >.05）
   if (head.akName === 'jump') {
-    const ph = ((((t - head.akSeit) / 1.7) % 1) + 1) % 1;
+    const ph = ((((qt / 1.7) % 1) + 1) % 1);
     const land = ph >= .78 ? Math.sin((ph - .78) / .22 * Math.PI) : 0;
     if (land > .25 && pose.dy > .05) {
-      const nr = Math.floor((t - head.akSeit) / 1.7);
+      const nr = Math.floor(qt / 1.7);
       for (let i = 0; i < 3; i++) {
         const dir = i - 1;
         bodenStiftEinz.punkt(
@@ -3357,14 +3368,16 @@ function bodenZeichnen(t, head) {
     }
   }
   // 走路脚印：每脚一枚椭圆印、触地起渐隐（原地踏步，多步队列会叠在同一处堆墨——
-  // 只留"一浓一淡"两枚共存）。步序 nr 编进笔标签防闪（同 splash 的套路），纯 t 的确定函数零状态
+  // 只留"一浓一淡"两枚共存）。步序 nr 编进笔标签防闪（同 splash 的套路），零状态变量；
+  // 相位走 12fps 量化钟与腿姿同帧；ein 渐入（真实 t，同 boing）压住切入首帧的"腿没迈印先落"
   if (head.akName === 'walk') {
-    const U = (t - head.akSeit) / 1.15;
+    const ein = Math.min(1, (t - head.akSeit) / .25);
+    const U = qt / 1.15;
     for (let i = 0; i < 2; i++) {
       const u = U + i * .5 + .5;   // 触地瞬间对齐取整（i=0 在 g=.5、i=1 在 g=0 落地）
       const nr = Math.floor(u);
       const alter = u - nr;   // 触地年龄 0→1
-      const alpha = Math.max(0, 1 - alter * 1.4);   // 淡出拉到 ~71% 周期：新印旁还留上一枚残影
+      const alpha = ein * Math.max(0, 1 - alter * 1.4);   // 淡出拉到 ~71% 周期；渐入乘进 alpha 复用跳过门
       if (alpha <= .05) continue;
       bodenStiftEinz.punkt(
         { x: fx + (i ? 1 : -1) * .15 * head.mass, y: bodenY + 2 },
