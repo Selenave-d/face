@@ -707,20 +707,27 @@ function zeichneMuzzle(stift, rec, k, face = 'ruhig') {
   }
   // 嘴在瓣下缘，按表情换
   const mundY = Math.min(my + ry * .62, boden - .08 * k);
+  // 嘴高处吻瓣的局部半宽（计入下缘 1.12 拉伸）：窄猫的嘴角原来越过瓣轮廓画到脸颊上，
+  // 各嘴形宽度按它钳制——狗最窄 rx≈.157k 时 mundHalb≥.137k 仍大于全部固定宽，笔画逐位不变
+  const qy = Math.max(-1, Math.min(1, (mundY - my) / (ry * 1.12)));
+  const mundHalb = rx * Math.sqrt(Math.max(0, 1 - qy * qy));
   if (face === 'froh') {
-    stift.line(bogenPts(0, mundY - .02 * k, .11 * k, .08 * k, Math.PI * .1, Math.PI * .9, 8), 1.5, { label: 89 });
+    const mw = Math.min(.11 * k, mundHalb);
+    stift.line(bogenPts(0, mundY - .02 * k, mw, mw * .727, Math.PI * .1, Math.PI * .9, 8), 1.5, { label: 89 });
   } else if (face === 'weint' || face === 'boese') {
-    stift.line(bogenPts(0, mundY + .05 * k, .09 * k, .06 * k, Math.PI * 1.12, Math.PI * 1.88, 8), 1.4, { label: 89 });
+    const mw = Math.min(.09 * k, mundHalb);
+    stift.line(bogenPts(0, mundY + .05 * k, mw, mw * .667, Math.PI * 1.12, Math.PI * 1.88, 8), 1.4, { label: 89 });
   } else if (face === 'angst') {
     stift.dot(0, mundY, .035 * k, .7, 89);
   } else if (face === 'schlaeft') {
     // 睡着的小嘴：配方里的吐舌/猫嘴都不画
-    stift.line([[-.05 * k, mundY], [.05 * k, mundY + .012 * k]], 1.3, { label: 88 });
+    const sw = Math.min(.05 * k, mundHalb);
+    stift.line([[-sw, mundY], [sw, mundY + .012 * k]], 1.3, { label: 88 });
   } else if (rec.mouth.style === 'cat') {
     // 猫嘴：一个 W，从瓣尖垂下来两瓣弧
-    const w = .1 * k;
-    stift.line(bogenPts(-w * .5, mundY - .01 * k, w * .5, .05 * k, Math.PI * .1, Math.PI * .9, 6), 1.3, { label: 84 });
-    stift.line(bogenPts(w * .5, mundY - .01 * k, w * .5, .05 * k, Math.PI * .1, Math.PI * .9, 6), 1.3, { label: 85 });
+    const w = Math.min(.1 * k, mundHalb);
+    stift.line(bogenPts(-w * .5, mundY - .01 * k, w * .5, w * .5, Math.PI * .1, Math.PI * .9, 6), 1.3, { label: 84 });
+    stift.line(bogenPts(w * .5, mundY - .01 * k, w * .5, w * .5, Math.PI * .1, Math.PI * .9, 6), 1.3, { label: 85 });
   } else if (rec.mouth.style === 'tongue') {
     stift.line(bogenPts(0, mundY, .08 * k, .07 * k, Math.PI * .1, Math.PI * .9, 8), 1.4, { label: 86 });
     stift.dot(0, mundY + .05 * k, .03 * k, .5, 87);

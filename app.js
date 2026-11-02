@@ -2236,8 +2236,15 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
     if (p.y < tiefste - l * .06) continue;
     sumX += p.x; cnt++;
   }
-  const mx = (cnt ? sumX / cnt : 0) * .35;
-  const halb = Math.abs(punkt3d(schaedelPunkt(.3, -1.22, k).x, schaedelPunkt(.3, -1.22, k).y, schaedelPunkt(.3, -1.22, k).z, ctx3d).x);
+  const bandX = cnt ? sumX / cnt : 0;   // 下颌底带重心：下巴的真实去向（梯形上边全额跟它）
+  const mx = bandX * .35;               // 颈根/领口/肩块守 35%（≈身体中线），a/b 锚点不动
+  // 颈宽：±.3 两镜像点投影 x 的半距。单点 |x| 会被 yaw 把 z 分量（≈3.2 倍于 x）搅进来，
+  // ±.4 时颈宽 3 倍摆动（转头动画里脖子逐帧呼吸）；半距在全姿态限内变化 ≤10%
+  const halsL = schaedelPunkt(-.3, -1.22, k), halsR = schaedelPunkt(.3, -1.22, k);
+  const halb = Math.abs(
+    punkt3d(halsR.x, halsR.y, halsR.z, ctx3d).x -
+    punkt3d(halsL.x, halsL.y, halsL.z, ctx3d).x
+  ) / 2;
   const yB = punkt3d(0, schaedelPunkt(0, -1.22, k).y, schaedelPunkt(0, -1.22, k).z, ctx3d).y + l * .24;
   const obenY = tiefste - l * .12;
   const untenY = Math.max(yB, tiefste + l * .08);
@@ -2259,10 +2266,11 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
     stift.flaeche(pts, { farbe: pal.stoff, spur: 'schulter', wackel: .004 });
     stift.zug(pts, { spur: 'schulter-rand', geschlossen: true, w: .026, wackel: .005, farbe: pal.tinte });
   }
-  stift.flaeche([{ x: mx - halb, y: obenY }, { x: mx + halb, y: obenY }, b, a], { farbe: pal.haut, eckig: true, trocken: true });
+  // 颈皮四边形与领侧线都是梯形：上边跟下颌底带（大 yaw 时起笔钉在下颌剪影内，不再穿缝），下边钉 a/b 颈根
+  stift.flaeche([{ x: bandX - halb, y: obenY }, { x: bandX + halb, y: obenY }, b, a], { farbe: pal.haut, eckig: true, trocken: true });
   const linienOben = tiefste - l * .05;
-  stift.zug([{ x: mx - halb, y: linienOben }, a], { spur: 'hals-l', w: .022, wackel: .004, farbe: pal.tinte });
-  stift.zug([{ x: mx + halb, y: linienOben }, b], { spur: 'hals-r', w: .022, wackel: .004, farbe: pal.tinte });
+  stift.zug([{ x: bandX - halb, y: linienOben }, a], { spur: 'hals-l', w: .022, wackel: .004, farbe: pal.tinte });
+  stift.zug([{ x: bandX + halb, y: linienOben }, b], { spur: 'hals-r', w: .022, wackel: .004, farbe: pal.tinte });
   if (kragen === 'v') {
     stift.zug([{ x: a.x - .08, y: a.y + .02 }, { x: mx, y: untenY + l * .16 }, { x: b.x + .08, y: b.y + .02 }],
       { spur: 'kragen', w: .022, wackel: .004, farbe: pal.tinte, eckig: true });
