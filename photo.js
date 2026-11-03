@@ -387,7 +387,7 @@ function leseSpeicher() {                 // → 合法规格对象或 null（�
     const roh = window.localStorage.getItem(SPEICHER_KEY);
     if (!roh) return null;
     const d = JSON.parse(roh);
-    if (!d || d.v !== 1) return null;     // 版本不符整体丢弃：未来升版即自动清旧档
+    if (!d || d.v > 1) return null;      // 只拒「比本代码新」的档：v1 是唯一历史版本；未来升 v2 时此上界改 2，v1 老档走下方逐字段缺省兜底（升版不清档）
     const out = { gesamt: 0, jahrbuch: [], besitz: [] };
     if (Number.isFinite(d.gesamt) && d.gesamt >= 0) out.gesamt = Math.floor(d.gesamt);
     if (Array.isArray(d.jahrbuch))
@@ -468,7 +468,7 @@ function knips(t) {
   abzuege.push({
     recs: [...gewaehlt].map((i) => kinder[i].rec),
     titel: ergebnis.name,
-    stempel: erste,             // 首录牌型：拍立得白带上盖一枚「首」印
+    stempel: erste ? '首' : '再',   // 首录盖「首」、重录盖「再」：毕业集齐后重录不再零反馈（二周目动力），毕业前重录已录牌型同样有交代
     datum: `${new Date().getMonth() + 1}月${new Date().getDate()}日`,   // 拍立得白带的手写日期
   });
   if (abzuege.length > 3) abzuege.shift();
@@ -1018,7 +1018,7 @@ function abZeichnen(c, st, ab, w, band, h, qt, mob) {
   c.textBaseline = 'middle';
   c.fillStyle = '#8b8894';
   c.fillText(ab.titel, w / 2, h - band / 2 + 1);
-  // 年鉴首录：白带左端一枚歪「首」印（朱红方框 + 楷体）；textAlign/baseline 沿用上面 titel 的居中设置
+  // 年鉴首录/重录：白带左端一枚歪「首/再」印（朱红方框 + 楷体）；textAlign/baseline 沿用上面 titel 的居中设置
   if (ab.stempel) {
     const ss = mob ? 5 : 6.5;   // 半边长：rotate(.35) 后外扩 ×1.28，22/28 的带高里不啃上下边线
     c.save();
@@ -1029,7 +1029,7 @@ function abZeichnen(c, st, ab, w, band, h, qt, mob) {
     c.strokeRect(-ss, -ss, ss * 2, ss * 2);
     c.font = `${mob ? 7 : 9}px "Kaiti", "STKaiti", "楷体", serif`;
     c.fillStyle = '#b0654a';
-    c.fillText('首', 0, 0);
+    c.fillText(ab.stempel, 0, 0);
     c.restore();
   }
   // 白带右端手写日期角标：拍立得在相纸边写日期的惯例

@@ -22,7 +22,8 @@
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
   #gesichte {
     position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%);
-    display: flex; gap: 6px; align-items: center;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; align-items: center;
+    width: max-content; max-width: calc(100vw - 24px);   /* 十枚钮单行 ~684px：720-759 窄桌面带距边仅 ~5%，文字放大即被裁——无条件可折行 */
   }
   #gesichte button {
     font: 11px/1 "Courier New", monospace; letter-spacing: 2px; color: #a89f93;
