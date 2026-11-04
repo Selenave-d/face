@@ -2355,8 +2355,11 @@ const AKTIONEN = {
       const si = i === 0 ? -1 : 1;   // 挥手那只手的屏幕侧向（0=左 1=右）
       const f = holdSin(q * 2 / 2.2, .6);
       const flick = 1 - Math.abs(f);
-      // 横向偏移必须乘 si：否则挥左手时手被推向画面右侧，横穿身体藏到头后
-      p.arm[i] = { ex: .45 * si, ey: -.9, hx: (.7 + .3 * f) * si, hy: -3.35 + .25 * Math.abs(f) };
+      // 横向偏移必须乘 si：否则挥左手时手被推向画面右侧，横穿身体藏到头后。
+      // 纵向随身材：原 -3.35 是 bodyLen≈3.93 的调参值——高个（bl 5.34）腕点贴颈、矮个（3.34）飞过头顶；
+      // -.62·bl 抵消 W0 坠落、-.62·kopfH+.1 从肩线举到耳边，各身高都挥到耳边
+      const kopfH = dna.kopf.ry * 1.9, bl = dna.koerper.ratio * kopfH;
+      p.arm[i] = { ex: .45 * si, ey: -.23 * bl, hx: (.7 + .3 * f) * si, hy: .1 - .62 * (bl + kopfH) + .25 * Math.abs(f) };
       p.arm[1 - i] = { ex: .03 * si, ey: .03, hx: .06 * si, hy: .04 };   // 休息臂同乘 si 向身体收——不乘则恒向画面左，挥右手时把左臂推离身体
       p.lean = .05; p.dx = .03; p.dy = -.02 * flick;
       p.bein[0].fy = p.bein[1].fy = .04 * flick;   // 同款踝补偿：踮脚不浮空（在 neutralPose 默认腿上补字段）
@@ -2386,9 +2389,10 @@ const AKTIONEN = {
   // 跳跃：下蹲预备 → 腾空（全身起、腿收、臂举）→ 落地回弹
   jump: {
     periode: 1.7,
-    pose(q) {
+    pose(q, dna) {
       const p = neutralPose();
       const t = (((q / 1.7) % 1) + 1) % 1;
+      const blJ = dna.koerper.ratio * dna.kopf.ry * 1.9;   // 手臂保长重投的配套：W0 本在 E0 下方 .36·bl，腾空臂不上抬这段落差就被重投成斜下伸
       let crouch = 0, air = 0, land = 0;
       if (t < .12) crouch = t / .12;
       else if (t < .22) crouch = 1;
@@ -2400,7 +2404,7 @@ const AKTIONEN = {
         const s = i ? 1 : -1;
         p.arm[i] = {
           ex: s * (.1 * crouch + .15 * hang), ey: .26 * crouch - .5 * hang + .1 * land,
-          hx: s * (.14 * crouch + .3 * hang), hy: .38 * crouch - 1.5 * hang + .18 * land,
+          hx: s * (.14 * crouch + .3 * hang), hy: .38 * crouch - (.36 * blJ + 1.5) * hang + .18 * land,
         };
         p.bein[i] = {
           kx: s * (.06 * crouch + .1 * hang), ky: .14 * crouch - .35 * hang + .1 * land,
@@ -2415,15 +2419,16 @@ const AKTIONEN = {
   // 跳舞：重心左右倒 + 双臂抬起晃 + 膝盖交替弯 + 头带一点 roll
   dance: {
     periode: 1.9,
-    pose(q) {
+    pose(q, dna) {
       const p = neutralPose();
+      const blD = dna.koerper.ratio * dna.kopf.ry * 1.9;   // 同 jump：抵消 W0 相对 E0 的 .36·bl 落差
       const hip = holdSin(q / 1.9, .38);
       const bounce = Math.abs(Math.sin(q / 1.9 * TAU * 2));
       const upL = Math.max(0, -hip), upR = Math.max(0, hip);
       p.dx = hip * .12; p.lean = hip * .14; p.dy = -.04 * bounce;
       p.kopfRoll = -hip * .07;
-      p.arm[0] = { ex: -.15, ey: -.3 - upL * .45, hx: -.3 + hip * .1, hy: -1.3 - upL * .7 - bounce * .12 };
-      p.arm[1] = { ex: .15, ey: -.3 - upR * .45, hx: .3 + hip * .1, hy: -1.3 - upR * .7 - bounce * .12 };
+      p.arm[0] = { ex: -.15, ey: -.3 - upL * .45, hx: -.3 + hip * .1, hy: -(.36 * blD + 1.3) - upL * .7 - bounce * .12 };
+      p.arm[1] = { ex: .15, ey: -.3 - upR * .45, hx: .3 + hip * .1, hy: -(.36 * blD + 1.3) - upR * .7 - bounce * .12 };
       p.bein[0] = { kx: 0, ky: upL * .05, fx: 0, fy: -upR * .12 * bounce + .08 * bounce };   // 末项吃掉双份 dy（-.04·bounce 的 ×2），脚跟弹跳不浮空
       p.bein[1] = { kx: 0, ky: upR * .05, fx: 0, fy: -upL * .12 * bounce + .08 * bounce };
       return p;
@@ -2512,8 +2517,16 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     const S = T({ x: mx + s * shw * .92, y: Y(schulterSpitzeY) });
     const E0 = T({ x: mx + s * (shw + .08), y: Y(schulterY + (handY - schulterY) * .42) });
     const W0 = T({ x: mx + s * (hipHW + .1), y: handY });
-    const E = { x: E0.x + ap.ex * 1, y: E0.y + ap.ey };
-    const W = { x: W0.x + ap.hx, y: W0.y + ap.hy };
+    let E = { x: E0.x + ap.ex, y: E0.y + ap.ey };
+    let W = { x: W0.x + ap.hx, y: W0.y + ap.hy };
+    // 保长只转方向：E 沿 S→E 重投回默认 |S→E0|、W 沿 E→W 重投回默认 |E0→W0|——pose 直接给点位
+    // 无人约束杆距，dance/jump 满幅时前臂从 1.54 塌到 .35、长袖管读成团块；stand 是严格不动点
+    const se0 = Math.hypot(E0.x - S.x, E0.y - S.y) || 1;
+    const seLen = Math.hypot(E.x - S.x, E.y - S.y) || 1;
+    E = { x: S.x + (E.x - S.x) * se0 / seLen, y: S.y + (E.y - S.y) * se0 / seLen };
+    const ew0 = Math.hypot(W0.x - E0.x, W0.y - E0.y) || 1;
+    const ewLen = Math.hypot(W.x - E.x, W.y - E.y) || 1;
+    W = { x: E.x + (W.x - E.x) * ew0 / ewLen, y: E.y + (W.y - E.y) * ew0 / ewLen };
     const foreArmAng = Math.atan2(W.x - E.x, W.y - E.y);   // 前臂相对竖直的方向
     if (kurzArm) {
       // 短袖：皮肤臂沿链铺满，袖管压在上臂段，袖口是向下鼓的包绕弧
@@ -2543,7 +2556,7 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
       const dE = { x: W.x - E.x, y: W.y - E.y }, dlE = Math.hypot(dE.x, dE.y) || 1;
       const fx = dE.x / dlE, fy = dE.y / dlE;
       for (let f = 0; f < 2; f++) {
-        const o = .06 + f * .07, hw = armW * (.95 - f * .2);
+        const o = Math.min(.06 + f * .07, dlE * .45), hw = armW * (.95 - f * .2);   // 塌缩时第 2 道褶不蹭袖口（正常杆长永不触发）
         const c = { x: E.x + fx * o, y: E.y + fy * o };
         stift.zug([
           { x: c.x + fy * hw, y: c.y - fx * hw },
