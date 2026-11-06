@@ -765,6 +765,7 @@ class Head {
     this.akVon = null;
     this.akBis = 0;
     this.akAuto = 15 + this.wuerfel() * 15;
+    this.hutDy = 0;   // 帽子惯性：身体 dy 的低通滞后值（帽子只是「放」在头上）
   }
 
   // 切换动作：先拍下当前混合姿态，再在新旧之间做 0.25s 插值
@@ -852,7 +853,9 @@ class Head {
   zustand(t) {
     const atem = Math.sin(t * this.atemTempo + this.atemPhase);
     let lider = 0;
-    if (t < this.blinzeltBis) lider = Math.sin((1 - (this.blinzeltBis - t) / .14) * Math.PI);
+    // 帽子惯性：dt 式增益与帧率无关——60fps 直绘页与 12fps 换帧精灵页同一节律，不成噪
+    this.hutDy += (this.motionPose(t).dy - this.hutDy) * (1 - Math.exp(-dt / .047));   // τ=47ms：60fps 下每帧约 ×.3
+  if (t < this.blinzeltBis) lider = Math.sin((1 - (this.blinzeltBis - t) / .14) * Math.PI);
     return {
       pose: clampPose({
         yaw: this.yaw + this.dna.pose.yaw * .5,
@@ -2315,14 +2318,14 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
 
 function neutralPose() {
   return {
-    dx: 0, dy: 0, lean: 0, kopfRoll: 0,
+    dx: 0, dy: 0, lean: 0, kopfRoll: 0, kopfNick: 0,
     arm: [{ ex: 0, ey: 0, hx: 0, hy: 0 }, { ex: 0, ey: 0, hx: 0, hy: 0 }],
     bein: [{ kx: 0, ky: 0, fx: 0, fy: 0 }, { kx: 0, ky: 0, fx: 0, fy: 0 }],
   };
 }
 function mixPose(a, b, f) {
   const p = neutralPose();
-  for (const key of ['dx', 'dy', 'lean', 'kopfRoll']) p[key] = a[key] + (b[key] - a[key]) * f;
+  for (const key of ['dx', 'dy', 'lean', 'kopfRoll', 'kopfNick']) p[key] = a[key] + (b[key] - a[key]) * f;
   for (let i = 0; i < 2; i++) {
     for (const key of ['ex', 'ey', 'hx', 'hy']) p.arm[i][key] = a.arm[i][key] + (b.arm[i][key] - a.arm[i][key]) * f;
     for (const key of ['kx', 'ky', 'fx', 'fy']) p.bein[i][key] = a.bein[i][key] + (b.bein[i][key] - a.bein[i][key]) * f;
@@ -2434,8 +2437,28 @@ const AKTIONEN = {
       return p;
     },
   },
+  // 鞠躬：正面无纵深——「折腰」由点头(pitch)+微沉+双臂后摆外展拼出；单拱一躬，先倾后起
+  bow: {
+    periode: 1.5,
+    pose(q) {
+      const p = neutralPose();
+      const t = (((q / 1.5) % 1) + 1) % 1;
+      let b;   // 鞠躬深度 0..1：俯身 .57s（缓入）→ 停一拍 .21s → 起身 .72s（慢于俯身=郑重）
+      if (t < .38) b = smooth(t / .38);
+      else if (t < .52) b = 1;
+      else b = 1 - smooth((t - .52) / .48);
+      p.kopfNick = .26 * b;   // 点头幅度取 POSE_LIMIT.pitch 同量级
+      p.dy = .09 * b;         // 微沉：无腰关节，全身轻沉代替折腰
+      for (let i = 0; i < 2; i++) {
+        const s = i ? 1 : -1;
+        p.arm[i] = { ex: s * .22 * b, ey: .06 * b, hx: s * .5 * b, hy: .28 * b };   // 后摆=外展+斜下；臂保长重投自动定长
+        p.bein[i] = { kx: 0, ky: 0, fx: 0, fy: -.18 * b };   // 踝补偿 -2×dy：脚钉地，腿链压短读作膝微屈
+      }
+      return p;
+    },
+  },
 };
-const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance'];
+const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance', 'bow'];
 
 /* ---------------- 骨架工具 ---------------- */
 
@@ -2619,23 +2642,24 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
   // 鞋：钉在踝点上，随小腿方向转
   for (const { s, K, A } of beinKette) {
     const shinAng = Math.atan2(A.x - K.x, A.y - K.y);
+    const schuhF = beinHW / .317;   // 中位 beinHW：中位身形鞋宽不变，宽瘦两端与裤脚同调（鞋长不动）
     const fx = A.x, fy = A.y + .18;
     const R = (dx, dy) => rotUm({ x: fx + dx, y: fy + dy }, { x: fx, y: fy - .18 }, -shinAng * .8);
     let schuh;
     if (ko.schuhe === 'stiefel') {
       schuh = [
-        R(-s * .13, -.36), R(s * .1, -.36), R(s * .11, -.14),
-        R(s * .25, -.1), R(s * .26, -.01), R(-s * .14, -.01),
+        R(-s * .13 * schuhF, -.36), R(s * .1 * schuhF, -.36), R(s * .11 * schuhF, -.14),
+        R(s * .25 * schuhF, -.1), R(s * .26 * schuhF, -.01), R(-s * .14 * schuhF, -.01),
       ];
     } else if (ko.schuhe === 'rund') {
       schuh = [
-        R(-s * .14, -.16), R(-s * .15, -.02), R(s * .26, -.01),
-        R(s * .27, -.08), R(s * .12, -.13), R(-s * .02, -.14),
+        R(-s * .14 * schuhF, -.16), R(-s * .15 * schuhF, -.02), R(s * .26 * schuhF, -.01),
+        R(s * .27 * schuhF, -.08), R(s * .12 * schuhF, -.13), R(-s * .02 * schuhF, -.14),
       ];
     } else {
       schuh = [
-        R(-s * .13, -.14), R(-s * .14, -.02), R(s * .3, -.02),
-        R(s * .3, -.09), R(s * .1, -.12), R(-s * .02, -.13),
+        R(-s * .13 * schuhF, -.14), R(-s * .14 * schuhF, -.02), R(s * .3 * schuhF, -.02),
+        R(s * .3 * schuhF, -.09), R(s * .1 * schuhF, -.12), R(-s * .02 * schuhF, -.13),
       ];
     }
     stift.flaeche(schuh, { farbe: pal.schuh, spur: `schuh${s}`, wackel: .004 });
@@ -2826,6 +2850,10 @@ function drawHead(ctx, head, t) {
   const z = head.zustand(t);
   const koerperPose = head.motionPose(t);
   z.pose.roll += koerperPose.kopfRoll;   // 跳舞时头带一点侧倾
+  z.pose.pitch += koerperPose.kopfNick ?? 0;   // 鞠躬点头：pitch 轴（roll 是侧倾，正视画面没有俯仰自由度——点头由这里补通路）
+  // 帽子惯性差值：只对 hut 生效（耳机夹紧、发带贴头不滞后）；±.12 封顶防 jump 极值滑脱
+  const hutLag = dna.merkmale.kopfbedeckung === 'hut'
+    ? clamp((head.hutDy ?? 0) - koerperPose.dy, -.12, .12) : 0;
   const pose = z.pose;
   const m = rotMatrix(pose);
   const ctx3d = { kopf: dna.kopf, pose, m, refU: cache.ref.refU, refV: cache.ref.refV, dna };
@@ -2856,7 +2884,9 @@ function drawHead(ctx, head, t) {
   const hals = drawNeck(stift, dna, ctx3d, umriss, (WAND || CLIP || AVATAR) ? mk.kragen : 'keiner', pal, WAND || CLIP || AVATAR);
   // 2. 后发 / 帽子后部 / 耳机后梁
   drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal);
+  ctx.save(); ctx.translate(0, hutLag);
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
+  ctx.restore();
   // 2.5 身体：骨架链 + 动作姿态（一墙脸/剪报/头像的胸像不画身体）
   if (!WAND && !CLIP && !AVATAR) drawBody(stift, dna, pal, hals, Math.sin(t * head.atemTempo + head.atemPhase), koerperPose);
   // 3. 耳朵（朝向我们的那只后画）
@@ -2915,7 +2945,9 @@ function drawHead(ctx, head, t) {
   }
   // 13. 头发与前侧覆盖物
   drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
+  ctx.save(); ctx.translate(0, hutLag);
   drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
+  ctx.restore();
   // 14. 小装饰（耳环/创可贴贴在最上层；帽子或 afro/爆炸卷盖住耳朵时不画耳环，免得浮在发块上）
   // zoepfe 双辫垂过耳区（辫心 ±1.17rx、内缘 1.04rx 恰好盖住耳环锚点外 .06 处）——环画最顶层会浮在发辫上
   const ohrVerdeckt = kopfh || ['afro', 'lockenwolke', 'zoepfe'].includes(dna.merkmale.haar);
@@ -3250,7 +3282,7 @@ if (!FOTO && !CROWD && !CLIP && !AVATAR) {
   if (WAND) window.__wand = { vergroessert: -1, gesichtKey: '' };
 }
 
-// 动作按钮与键盘 1-5（只单人模式有）
+// 动作按钮与键盘 1-6（只单人模式有）
 function syncAktionsUI(name) {
   document.querySelectorAll('.ak').forEach((b) => {
     const an = b.dataset.ak === name;
@@ -3271,7 +3303,7 @@ document.querySelectorAll('.ak').forEach((b) => b.addEventListener('click', () =
 if (!WAND && !FOTO && !CROWD && !CLIP && !AVATAR) addEventListener('keydown', (e) => {
   if (e.repeat) return;   // 长按连发会反复重掷过渡起点，把动作冻在 0.25s 插值半路
   if (e.ctrlKey || e.metaKey || e.altKey) return;   // 浏览器快捷键（Ctrl+1 切标签等）不触发动作
-  const i = '12345'.indexOf(e.key);
+  const i = '123456'.indexOf(e.key);   // 1-6：bow 鞠躬占 6
   if (i >= 0) waehleAktion(AKTION_NAMEN[i]);
 });
 // 一墙脸 · 放大视图：1-5 直选表情（1 复原/2 笑/3 怒/4 难过/5 困），与头像页按钮同一套心智；
