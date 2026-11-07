@@ -339,6 +339,13 @@ function feierTick(t) {
     sprungBei = 0;
     raketenBei = 0;
   } else if (!voll) {
+    if (feier) {   // true→false 只在这一帧：补一拍全员挥手告别再散，人群不再半拍被掐断冷场
+      const sicht = sichtbarAus(wert);
+      leute.forEach((h, i) => {
+        if (clamp(sicht - plaetze[i].rang, 0, 1) < 1) return;   // 没站稳/不可见的不逗（同点击逗弄判据）
+        h.setAktion('wave', t, AKTIONEN.wave.periode);   // 2.2s 后经引擎 akBis 自动回 stand
+      });
+    }
     feier = false;
     return;
   }

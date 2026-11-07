@@ -822,6 +822,8 @@ class Head {
     this.blickX += (zBlickX - this.blickX) * gx;
     this.blickY += (zBlickY - this.blickY) * gx;
     this.wach += (zWach - this.wach) * (1 - Math.exp(-dt * 7));
+    // 帽子惯性：dt 式增益与帧率无关——60fps 直绘页与 12fps 换帧精灵页同一节律，不成噪
+    this.hutDy += (this.motionPose(t).dy - this.hutDy) * (1 - Math.exp(-dt / .047));   // τ=47ms：60fps 下每帧约 ×.3
     if (t > this.naechsterBlink) {
       this.blinzeltBis = t + .14;
       this.naechsterBlink = t + (this.wach > .5 ? 1.6 : 3) + this.wuerfel() * 4;
@@ -853,8 +855,6 @@ class Head {
   zustand(t) {
     const atem = Math.sin(t * this.atemTempo + this.atemPhase);
     let lider = 0;
-    // 帽子惯性：dt 式增益与帧率无关——60fps 直绘页与 12fps 换帧精灵页同一节律，不成噪
-    this.hutDy += (this.motionPose(t).dy - this.hutDy) * (1 - Math.exp(-dt / .047));   // τ=47ms：60fps 下每帧约 ×.3
   if (t < this.blinzeltBis) lider = Math.sin((1 - (this.blinzeltBis - t) / .14) * Math.PI);
     return {
       pose: clampPose({
@@ -2363,7 +2363,12 @@ const AKTIONEN = {
       // -.62·bl 抵消 W0 坠落、-.62·kopfH+.1 从肩线举到耳边，各身高都挥到耳边
       const kopfH = dna.kopf.ry * 1.9, bl = dna.koerper.ratio * kopfH;
       p.arm[i] = { ex: .45 * si, ey: -.23 * bl, hx: (.7 + .3 * f) * si, hy: .1 - .62 * (bl + kopfH) + .25 * Math.abs(f) };
-      p.arm[1 - i] = { ex: .03 * si, ey: .03, hx: .06 * si, hy: .04 };   // 休息臂同乘 si 向身体收——不乘则恒向画面左，挥右手时把左臂推离身体
+      // 休息臂同乘 si 向身体收（不乘则恒向画面左），并继承 stand 的呼吸频率（同频不同相）——挥手期间不再钉住
+      p.arm[1 - i] = {
+        ex: .03 * si + .012 * Math.sin(q * 1.5 + dna.taktVersatz * 6 + 2),   // +2 错相：不与身体节拍同帧极值
+        ey: .03 + .008 * Math.sin(q * 2.2 + 1),
+        hx: .06 * si, hy: .04,
+      };
       p.lean = .05; p.dx = .03; p.dy = -.02 * flick;
       p.bein[0].fy = p.bein[1].fy = .04 * flick;   // 同款踝补偿：踮脚不浮空（在 neutralPose 默认腿上补字段）
       p.kopfRoll = -.04 + f * .015;

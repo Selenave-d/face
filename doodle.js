@@ -1071,9 +1071,10 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
     const my = cy + .28 * k;
     const schnauzeRx = rec.skull.muzzle * k * .5 * (rec.skull.fett ?? 1);
     const x0 = Math.max(R * .55, schnauzeRx + .06 * k);
+    const kipp = face === 'froh' ? -.015 * k : face === 'boese' ? .015 * k : 0;   // 胡须倾角挂表情：喜上挑/怒下压/其余平（y 向下为正）
     for (const s of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
-        stift.line([[s * x0, my + (i - 1) * .03 * k], [s * (x0 + R * .5), my + (i - 1) * .07 * k]], 1, { label: 155 + i + s * 10, alpha: .6 });
+        stift.line([[s * x0, my + (i - 1) * .03 * k], [s * (x0 + R * .5), my + (i - 1) * .07 * k + kipp]], 1, { label: 155 + i + s * 10, alpha: .6 });
       }
     }
   }
