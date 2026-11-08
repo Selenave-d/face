@@ -383,7 +383,7 @@ function kleinTick(t) {
   }
   if (!kand.length) return;
   const r = Math.random();
-  const name = r < .55 ? 'wave' : r < .85 ? 'jump' : 'walk';
+  const name = r < .5 ? 'wave' : r < .75 ? 'jump' : r < .9 ? 'walk' : 'bow';   // bow 十分之一：稀疏人群偶见一人躬身谢幕（点头只压矮头形不增高，画布余量足）
   kand[(Math.random() * kand.length) | 0].setAktion(name, t, AKTIONEN[name].periode);
 }
 

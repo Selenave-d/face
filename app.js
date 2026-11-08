@@ -766,6 +766,7 @@ class Head {
     this.akBis = 0;
     this.akAuto = 15 + this.wuerfel() * 15;
     this.hutDy = 0;   // 帽子惯性：身体 dy 的低通滞后值（帽子只是「放」在头上）
+    this.hutDx = 0;   // 帽子横向惯性：身体 dx 的低通滞后值（头只跟 dx，lean 只挪身体）
   }
 
   // 切换动作：先拍下当前混合姿态，再在新旧之间做 0.25s 插值
@@ -824,6 +825,7 @@ class Head {
     this.wach += (zWach - this.wach) * (1 - Math.exp(-dt * 7));
     // 帽子惯性：dt 式增益与帧率无关——60fps 直绘页与 12fps 换帧精灵页同一节律，不成噪
     this.hutDy += (this.motionPose(t).dy - this.hutDy) * (1 - Math.exp(-dt / .047));   // τ=47ms：60fps 下每帧约 ×.3
+    this.hutDx += (this.motionPose(t).dx - this.hutDx) * (1 - Math.exp(-dt / .047));   // 横向同款：dance 重心倒换时帽尖晚半拍跟上
     if (t > this.naechsterBlink) {
       this.blinzeltBis = t + .14;
       this.naechsterBlink = t + (this.wach > .5 ? 1.6 : 3) + this.wuerfel() * 4;
@@ -2633,11 +2635,13 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
       const bein = gliedKette([H, K, A], [beinHW * .85, beinHW * .68, beinHW * .5]);
       stift.flaeche(bein, { farbe: pal.hose, spur: `bein${s}`, wackel: .005 });
       stift.zug(bein, { spur: `bein-rand${s}`, geschlossen: true, ...linie });
-      // 裤脚收口
+      // 裤脚收口；stiefel 时半宽钳进靴筒壁内（±.095F 落在内 -.136F/外 .105F 之间）——
+      // 等价「裤脚塞进靴筒」，收口线不再探出筒侧悬空；其他鞋型零影响
       const nA = pathNormals([K, A])[1];
+      const muendHW = ko.schuhe === 'stiefel' ? Math.min(beinHW * .5, .095 * beinHW / .317) : beinHW * .5;
       stift.zug([
-        { x: A.x + nA.x * beinHW * .5, y: A.y + nA.y * beinHW * .5 },
-        { x: A.x - nA.x * beinHW * .5, y: A.y - nA.y * beinHW * .5 },
+        { x: A.x + nA.x * muendHW, y: A.y + nA.y * muendHW },
+        { x: A.x - nA.x * muendHW, y: A.y - nA.y * muendHW },
       ], { spur: `hosenbein${s}`, ...duenn, deckung: .7 });
     }
     // 裆部一道短竖线，两腿分叉
@@ -2652,8 +2656,9 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     const R = (dx, dy) => rotUm({ x: fx + dx, y: fy + dy }, { x: fx, y: fy - .18 }, -shinAng * .8);
     let schuh;
     if (ko.schuhe === 'stiefel') {
+      const zylinderY = -.36 * Math.sqrt(schuhF);   // 筒顶随腿宽同调（sqrt 阻尼）：宽体不再读矮筒，脚部几何（-.14 起）保持「鞋长不动」
       schuh = [
-        R(-s * .13 * schuhF, -.36), R(s * .1 * schuhF, -.36), R(s * .11 * schuhF, -.14),
+        R(-s * .13 * schuhF, zylinderY), R(s * .1 * schuhF, zylinderY), R(s * .11 * schuhF, -.14),
         R(s * .25 * schuhF, -.1), R(s * .26 * schuhF, -.01), R(-s * .14 * schuhF, -.01),
       ];
     } else if (ko.schuhe === 'rund') {
@@ -2856,9 +2861,10 @@ function drawHead(ctx, head, t) {
   const koerperPose = head.motionPose(t);
   z.pose.roll += koerperPose.kopfRoll;   // 跳舞时头带一点侧倾
   z.pose.pitch += koerperPose.kopfNick ?? 0;   // 鞠躬点头：pitch 轴（roll 是侧倾，正视画面没有俯仰自由度——点头由这里补通路）
-  // 帽子惯性差值：只对 hut 生效（耳机夹紧、发带贴头不滞后）；±.12 封顶防 jump 极值滑脱
-  const hutLag = dna.merkmale.kopfbedeckung === 'hut'
-    ? clamp((head.hutDy ?? 0) - koerperPose.dy, -.12, .12) : 0;
+  // 帽子惯性差值：只对 hut 生效（耳机夹紧、发带贴头不滞后）；y ±.12/x ±.1 封顶防 jump 极值滑脱
+  const hutTrag = dna.merkmale.kopfbedeckung === 'hut';
+  const hutLag = hutTrag ? clamp((head.hutDy ?? 0) - koerperPose.dy, -.12, .12) : 0;
+  const hutLagX = hutTrag ? clamp((head.hutDx ?? 0) - koerperPose.dx, -.1, .1) : 0;
   const pose = z.pose;
   const m = rotMatrix(pose);
   const ctx3d = { kopf: dna.kopf, pose, m, refU: cache.ref.refU, refV: cache.ref.refV, dna };
@@ -2889,7 +2895,7 @@ function drawHead(ctx, head, t) {
   const hals = drawNeck(stift, dna, ctx3d, umriss, (WAND || CLIP || AVATAR) ? mk.kragen : 'keiner', pal, WAND || CLIP || AVATAR);
   // 2. 后发 / 帽子后部 / 耳机后梁
   drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal);
-  ctx.save(); ctx.translate(0, hutLag);
+  ctx.save(); ctx.translate(hutLagX, hutLag);
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
   ctx.restore();
   // 2.5 身体：骨架链 + 动作姿态（一墙脸/剪报/头像的胸像不画身体）
@@ -2950,7 +2956,7 @@ function drawHead(ctx, head, t) {
   }
   // 13. 头发与前侧覆盖物
   drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
-  ctx.save(); ctx.translate(0, hutLag);
+  ctx.save(); ctx.translate(hutLagX, hutLag);
   drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
   ctx.restore();
   // 14. 小装饰（耳环/创可贴贴在最上层；帽子或 afro/爆炸卷盖住耳朵时不画耳环，免得浮在发块上）
