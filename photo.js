@@ -743,12 +743,19 @@ function zeichneName(kind) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#8b8894';
   ctx.fillText(kind.name, kind.x, kind.nameY);
-  if (kind === hoverKind && phase === 'idle') {   // 悬停小注：体型维的展示出口（不入判定的替代）
-    ctx.font = `10px "Kaiti", "STKaiti", "楷体", serif`;
-    try { ctx.letterSpacing = '1px'; } catch (e) { /* 旧浏览器忽略 */ }
-    ctx.fillStyle = '#a89f93';
-    ctx.fillText(`${ART_NAME[kind.rec.art]}·${TORSO_NAME[kind.rec.torso.shape]}身`, kind.x, kind.nameY + 14);
-  }
+  ctx.restore();
+}
+
+/* 悬停小注（顶层趟）：体型维的展示出口（不入判定的替代）。挪出逐人趟——
+ * 后排孩子的小注原会被后画的前排身体盖掉一角；名牌本身仍留原深度（景深语言） */
+function zeichneNotiz(kind) {
+  ctx.save();
+  ctx.font = `10px "Kaiti", "STKaiti", "楷体", serif`;
+  try { ctx.letterSpacing = '1px'; } catch (e) { /* 旧浏览器忽略 */ }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#a89f93';
+  ctx.fillText(`${ART_NAME[kind.rec.art]}·${TORSO_NAME[kind.rec.torso.shape]}身`, kind.x, kind.nameY + 14);
   ctx.restore();
 }
 
@@ -1207,6 +1214,11 @@ function rahmen(now) {
   for (const i of gewaehlt) {
     if (kinder[i].zustand === 'da') zeichneWahl(kinder[i], t);
   }
+  // 悬停小注顶层趟：主循环与选中圈都画完再补——不再被后画的前排身体盖角；
+  // indexOf 守卫挡掉换班清空 kinder 后 hoverKind 悬空引用旧坐标的边角
+  if (phase === 'idle' && hoverKind && hoverKind.zustand === 'da'
+    && kinder.indexOf(hoverKind) >= 0) zeichneNotiz(hoverKind);
+
   zeichneGesamt();
   zeichneZiel();
   zeichneBanner(t);

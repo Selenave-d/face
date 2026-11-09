@@ -767,6 +767,8 @@ class Head {
     this.akAuto = 15 + this.wuerfel() * 15;
     this.hutDy = 0;   // 帽子惯性：身体 dy 的低通滞后值（帽子只是「放」在头上）
     this.hutDx = 0;   // 帽子横向惯性：身体 dx 的低通滞后值（头只跟 dx，lean 只挪身体）
+    this.haarDy = 0;   // 发梢惯性：比帽轻 τ 稍长更飘
+    this.haarDx = 0;
   }
 
   // 切换动作：先拍下当前混合姿态，再在新旧之间做 0.25s 插值
@@ -823,9 +825,12 @@ class Head {
     this.blickX += (zBlickX - this.blickX) * gx;
     this.blickY += (zBlickY - this.blickY) * gx;
     this.wach += (zWach - this.wach) * (1 - Math.exp(-dt * 7));
-    // 帽子惯性：dt 式增益与帧率无关——60fps 直绘页与 12fps 换帧精灵页同一节律，不成噪
-    this.hutDy += (this.motionPose(t).dy - this.hutDy) * (1 - Math.exp(-dt / .047));   // τ=47ms：60fps 下每帧约 ×.3
-    this.hutDx += (this.motionPose(t).dx - this.hutDx) * (1 - Math.exp(-dt / .047));   // 横向同款：dance 重心倒换时帽尖晚半拍跟上
+    // 帽子/发梢惯性：dt 式增益与帧率无关——60fps 直绘页与 12fps 换帧精灵页同一节律，不成噪
+    const mp = this.motionPose(t);
+    this.hutDy += (mp.dy - this.hutDy) * (1 - Math.exp(-dt / .047));   // 帽 τ=47ms：60fps 下每帧约 ×.3
+    this.hutDx += (mp.dx - this.hutDx) * (1 - Math.exp(-dt / .047));   // 横向同款：dance 重心倒换时帽尖晚半拍跟上
+    this.haarDy += (mp.dy - this.haarDy) * (1 - Math.exp(-dt / .06));  // 发梢 τ=60ms：比帽轻更飘
+    this.haarDx += (mp.dx - this.haarDx) * (1 - Math.exp(-dt / .06));
     if (t > this.naechsterBlink) {
       this.blinzeltBis = t + .14;
       this.naechsterBlink = t + (this.wach > .5 ? 1.6 : 3) + this.wuerfel() * 4;
@@ -1685,7 +1690,7 @@ function aufSklaeleben(aussen, schaedelUmriss) {
   });
 }
 
-function drawHairBack(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal) {
+function drawHairBack(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal, lagX = 0, lagY = 0) {
   const kind = dna.merkmale.haar;
   if (kind === 'afro' && haarInfo.afro) {
     // 光整的后球，垫在头后面
@@ -1701,7 +1706,10 @@ function drawHairBack(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal) {
   const q = (t) => clamp(t, 0, 1) ** 2 * (3 - 2 * clamp(t, 0, 1));
   for (const seite of [-1, 1]) {
     const z = -rz * .1;
-    const lauf = (t) => ({ x: seite * rx * (.62 + .55 * q(t / .42)), y: ry * (.82 - 1.72 * t) });
+    // 发梢惯性：smoothstep 权重沿链递减（根 0 梢 1，根处导数 0 发根钉死）——
+    // 36 段轮廓/编织线/流苏/皮筋全经 lauf 取点自动继承同一弯度不撕裂；projekt 翻 y 故减 lagY
+    const w = (t) => { const u = clamp(t, 0, 1); return u * u * (3 - 2 * u); };
+    const lauf = (t) => ({ x: seite * rx * (.62 + .55 * q(t / .42)) + lagX * w(t), y: ry * (.82 - 1.72 * t) - lagY * w(t) });
     const ende = .84;
     const halb = (t) => rx * (.1 + .03 * Math.sin(Math.PI * Math.min(1, t / ende)) + .022 * Math.abs(Math.sin(Math.PI * 7 * (t / ende))));
     const links = [], rechts = [];
@@ -2865,6 +2873,10 @@ function drawHead(ctx, head, t) {
   const hutTrag = dna.merkmale.kopfbedeckung === 'hut';
   const hutLag = hutTrag ? clamp((head.hutDy ?? 0) - koerperPose.dy, -.12, .12) : 0;
   const hutLagX = hutTrag ? clamp((head.hutDx ?? 0) - koerperPose.dx, -.1, .1) : 0;
+  // 发梢滞后（zoepfe 双辫）：smoothstep 沿链递减施加（根硬梢飘），只传给 drawHairBack
+  const zopf = dna.merkmale.haar === 'zoepfe';
+  const haarLag = zopf ? clamp((head.haarDy ?? 0) - koerperPose.dy, -.08, .08) : 0;
+  const haarLagX = zopf ? clamp((head.haarDx ?? 0) - koerperPose.dx, -.08, .08) : 0;
   const pose = z.pose;
   const m = rotMatrix(pose);
   const ctx3d = { kopf: dna.kopf, pose, m, refU: cache.ref.refU, refV: cache.ref.refV, dna };
@@ -2894,7 +2906,7 @@ function drawHead(ctx, head, t) {
   //    一墙脸/剪报/头像都是胸像：带肩块、不画身体）
   const hals = drawNeck(stift, dna, ctx3d, umriss, (WAND || CLIP || AVATAR) ? mk.kragen : 'keiner', pal, WAND || CLIP || AVATAR);
   // 2. 后发 / 帽子后部 / 耳机后梁
-  drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal);
+  drawHairBack(stift, dna, ctx3d, haarInfo, umriss, pal, haarLagX, haarLag);
   ctx.save(); ctx.translate(hutLagX, hutLag);
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
   ctx.restore();
