@@ -755,7 +755,7 @@ function zeichneNotiz(kind) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#a89f93';
-  ctx.fillText(`${ART_NAME[kind.rec.art]}·${TORSO_NAME[kind.rec.torso.shape]}身`, kind.x, kind.nameY + 14);
+  ctx.fillText(`${ART_NAME[kind.rec.art]}·${TORSO_NAME[kind.rec.torso.shape]}身`, kind.x, Math.min(kind.nameY + 14, innerHeight - 100));   // 矮手机窗钳制：前排左起孩子的小注不压左下战利品卡区
   ctx.restore();
 }
 

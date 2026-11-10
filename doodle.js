@@ -1003,17 +1003,17 @@ function zeichneSchwanz(stift, rec, k, wag) {
 /* 围巾：脖处两道平行弧 + 一侧垂尾飘带。画在躯干后、头前——弧中段从下巴两侧露出。
  * 弧宽跟随躯干幅面（rx=brx×.7）：固定 .21k 是旧 round 幅面的肩宽——bean 窄肩上两端悬空、
  * 熊·梨宽胸上整个埋进身体读成两道胸前短线 */
-function zeichneSchal(stift, rec, k, brx) {
+function zeichneSchal(stift, rec, k, brx, flach) {   // flach：贴纸微型只画单弧单尾（两道弧间距 .035k 在 kK≈20px 下 0.7px，小于线宽糊成粗带）
   const rx = (brx ?? .26) * .7 * k;
   const b1 = bogenPts(0, -.52 * k, rx, .05 * k, Math.PI * .1, Math.PI * .9, 8);
-  const b2 = bogenPts(0, -.485 * k, rx, .05 * k, Math.PI * .12, Math.PI * .88, 8);
-  if (stift.istWash) stift.tone(b1.concat([...b2].reverse()), { label: 180, k });   // 水彩/马克：带子给淡彩细节
+  const b2 = flach ? null : bogenPts(0, -.485 * k, rx, .05 * k, Math.PI * .12, Math.PI * .88, 8);
+  if (stift.istWash) stift.tone(flach ? b1 : b1.concat([...b2].reverse()), { label: 180, k });   // 水彩/马克：带子给淡彩细节
   stift.line(b1, 1.5, { label: 181 });
-  stift.line(b2, 1.4, { label: 182, alpha: .85 });
+  if (!flach) stift.line(b2, 1.4, { label: 182, alpha: .85 });
   // 垂尾：从第二条弧的一端向躯干中部垂下的双飘线（x 随幅面同调，窄肩不出轮廓）
   const sd = _h2(rec.seed, 29) % 2 ? 1 : -1;
   const f = (brx ?? .26) / .26;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < (flach ? 1 : 2); i++) {
     stift.line([
       [sd * (.17 + i * .035) * f * k, -.47 * k],
       [sd * (.13 + i * .05) * f * k, -.3 * k],
@@ -1164,7 +1164,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   if (TS === 'pear') for (const p of koerper) if (p[1] > kCy) p[0] *= 1.16;   // 下半外扩成梨
   stift.haut(koerper, torsoDark(rec), { k, winkel: -.55 });   // 身体排线与头错开角度，交叉出铜版画味
   stift.line(koerper, 1.5, { closed: true, label: 13 });
-  if (rec.extras.scarf) zeichneSchal(stift, rec, k, brx);
+  if (rec.extras.scarf) zeichneSchal(stift, rec, k, brx, !!anim.flach);
   // 手臂：细棍下垂（根扎躯干轮廓内：.88×brx 幅面联动，bean 窄肩也内切）
   const armX = brx * .88 * k;
   for (const s of [-1, 1]) {
