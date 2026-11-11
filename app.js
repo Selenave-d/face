@@ -1756,7 +1756,7 @@ function drawHairBack(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal, lagX = 0
   }
 }
 
-function drawHair(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal) {
+function drawHair(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal, lagX = 0, lagY = 0) {
   const kind = dna.merkmale.haar;
   const seed = dna.seed;
   switch (kind) {
@@ -1831,17 +1831,21 @@ function drawHair(stift, dna, ctx3d, haarInfo, schaedelUmriss, pal) {
       if (kind === 'dutt') {
         const { r, flach } = haarInfo.dutt;
         const zentrum = haarOberflaeche(dna, ctx3d, 0, 1.42, haarInfo.schale.dicke + r * .85);
+        // 丸子惯性：底钉顶飘——接触底（sin=+1）w=0 钉死发根、顶点 w=1 吃 0.7 倍滞后，
+        // 构造性零露缝（整球平移在跳跃段会开 ~6px 白缝）；涡纹取半程视觉中心
+        const L = .7;
         const pts = [];
         for (let i = 0; i < 18; i++) {
           const a = i / 18 * 6.2832;
-          pts.push({ x: zentrum.x + Math.cos(a) * r, y: zentrum.y + Math.sin(a) * r * flach });
+          const w = (1 - Math.sin(a)) / 2 * L;
+          pts.push({ x: zentrum.x + Math.cos(a) * r + lagX * w, y: zentrum.y + Math.sin(a) * r * flach + lagY * w });
         }
         stift.flaeche(pts, { farbe: pal.haar, spur: 'dutt', wackel: .005 });
         stift.zug(pts, { spur: 'dutt-rand', w: .022, wackel: .005, farbe: pal.tinte, geschlossen: true, deckung: .75 });
         const kringel = [];
         for (let i = 0; i <= 14; i++) {
           const t = i / 14, a = t * 6.2832 * 1.6;
-          kringel.push({ x: zentrum.x + Math.cos(a) * r * .6 * t, y: zentrum.y + Math.sin(a) * r * .55 * t });
+          kringel.push({ x: zentrum.x + Math.cos(a) * r * .6 * t + lagX * L * .5, y: zentrum.y + Math.sin(a) * r * .55 * t + lagY * L * .5 });
         }
         stift.zug(kringel, { spur: 'dutt-kringel', w: .012, wackel: .003, farbe: pal.haut, deckung: .3, einlagig: true });
       }
@@ -2874,7 +2878,7 @@ function drawHead(ctx, head, t) {
   const hutLag = hutTrag ? clamp((head.hutDy ?? 0) - koerperPose.dy, -.12, .12) : 0;
   const hutLagX = hutTrag ? clamp((head.hutDx ?? 0) - koerperPose.dx, -.1, .1) : 0;
   // 发梢滞后（zoepfe 双辫）：smoothstep 沿链递减施加（根硬梢飘），只传给 drawHairBack
-  const zopf = dna.merkmale.haar === 'zoepfe';
+  const zopf = dna.merkmale.haar === 'zoepfe' || dna.merkmale.haar === 'dutt';   // dutt 丸子也走发梢惯性（底钉顶飘，见 drawHair）
   const haarLag = zopf ? clamp((head.haarDy ?? 0) - koerperPose.dy, -.08, .08) : 0;
   const haarLagX = zopf ? clamp((head.haarDx ?? 0) - koerperPose.dx, -.08, .08) : 0;
   const pose = z.pose;
@@ -2967,7 +2971,7 @@ function drawHead(ctx, head, t) {
     drawGlasses(stift, ctx3d, null, null, groessen.auge, mk.brille, pal, dna.kopf, dna.layout);
   }
   // 13. 头发与前侧覆盖物
-  drawHair(stift, dna, ctx3d, haarInfo, umriss, pal);
+  drawHair(stift, dna, ctx3d, haarInfo, umriss, pal, haarLagX, haarLag);
   ctx.save(); ctx.translate(hutLagX, hutLag);
   drawKopfbedeckung(stift, dna, ctx3d, haarInfo, umriss, pal);
   ctx.restore();

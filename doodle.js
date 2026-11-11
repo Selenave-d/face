@@ -1050,7 +1050,7 @@ function zeichneFlecken(stift, rec, k) {
 }
 
 /* 附加：雀斑/胡须/眼镜/泪 */
-function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
+function zeichneExtras(stift, rec, k, kopf, face = 'ruhig', qt = 0) {
   const x = rec.extras;
   const cy = -.95 * k;
   const R = .44 * rec.skull.s * k;
@@ -1074,7 +1074,10 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig') {
     const kipp = face === 'froh' ? -.015 * k : face === 'boese' ? .015 * k : 0;   // 胡须倾角挂表情：喜上挑/怒下压/其余平（y 向下为正）
     for (const s of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
-        stift.line([[s * x0, my + (i - 1) * .03 * k], [s * (x0 + R * .5), my + (i - 1) * .07 * k + kipp]], 1, { label: 155 + i + s * 10, alpha: .6 });
+        // 怕时胡须逐根高频微颤（炸毛）：qt 已 12fps 量化，qt*21≈3.3Hz 欠采样自带顿挫，
+        // 逐根错相 i*2.1、左右侧再错 1.3，幅度下限 .5px 保贴纸小尺寸也肉眼可见
+        const zit = face === 'angst' ? Math.sin(qt * 21 + i * 2.1 + (s > 0 ? 0 : 1.3)) * Math.max(.5, .004 * k) : 0;
+        stift.line([[s * x0, my + (i - 1) * .03 * k], [s * (x0 + R * .5), my + (i - 1) * .07 * k + kipp + zit]], 1, { label: 155 + i + s * 10, alpha: .6 });
       }
     }
   }
@@ -1193,7 +1196,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
     zeichneNase(stift, rec, k);
     zeichneMund(stift, rec, k, face);
   }
-  zeichneExtras(stift, rec, k, kopf, face);
+  zeichneExtras(stift, rec, k, kopf, face, qt);
   if (face === 'schlaeft') zeichneZzz(stift, rec, k, qt);
 
   ctx.restore();

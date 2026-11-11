@@ -439,7 +439,7 @@ function kopfSprite(h, p, t, namenAn) {
   }
   const sdpr = Math.min(dpr, p.reihe < 3 ? 1.25 : 1.75);   // 后排小精灵省显存
   const oben = raumBedarf(h).oben;
-  const W = p.mass * 4.4;                    // 横向最远：挥手 ±2.4 / 帽檐 ±2.1，取保守值
+  const W = p.mass * 4.4;                    // 横向约束项是帽檐 ±2.1（挥手经臂保长重投只到 ±1.5），半宽 2.2 余 0.1-0.2
   const H = (oben + fussWelt(h) + 1.55) * p.mass;   // 头顶余量 + 全身 + 脚下名字
   if (!sp) sp = h.sprite = { cv: document.createElement('canvas') };
   sp.key = key;
