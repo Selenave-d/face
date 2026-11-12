@@ -383,7 +383,7 @@ function kleinTick(t) {
   }
   if (!kand.length) return;
   const r = Math.random();
-  const name = r < .5 ? 'wave' : r < .75 ? 'jump' : r < .9 ? 'walk' : 'bow';   // bow 十分之一：稀疏人群偶见一人躬身谢幕（点头只压矮头形不增高，画布余量足）
+  const name = r < .48 ? 'wave' : r < .72 ? 'jump' : r < .86 ? 'walk' : r < .96 ? 'bow' : 'sneeze';   // bow 十分之一：偶见躬身谢幕；sneeze 廿五分之一：更稀有的喷嚏。pitch 会抬帽顶 .2-.3，不裁顶实靠 .95 余量——别再叠上抛
   kand[(Math.random() * kand.length) | 0].setAktion(name, t, AKTIONEN[name].periode);
 }
 
@@ -498,6 +498,10 @@ function rahmen(now) {
     const alpha = clamp(sicht - p.rang, 0, 1);
     if (alpha <= 0) continue;
     h.update(dt, t, pointer);
+    // 打喷嚏：打出来那一下（起手 .63s，pose 前顿段起点）闭一下眼；blinzeltBis 顺手把精灵换帧率提到 24fps
+    if (h.akName === 'sneeze') {
+      if (!h.niesBl && t - h.akSeit > .63) { h.niesBl = true; h.blinzeltBis = t + .14; }
+    } else h.niesBl = false;
     h.zeigeName = false;   // 名字改在人群之上统一画（循环后），不再被前排身体盖住
     if (alpha < 1) ctx.globalAlpha = alpha;
     // 脚下影子：三根短斜线，跳起时人离地、影子钉在原地并收窄变淡
@@ -513,6 +517,22 @@ function rahmen(now) {
     // 精灵缓存命中即贴图；未命中才整颗头重画（12fps 换帧，翻书感不变）
     const sp = kopfSprite(h, p, t, namenAn);
     ctx.drawImage(sp.cv, Math.round(p.x - sp.w / 2), Math.round(sp.topY), sp.w, sp.h);
+    // 喷嚏飞沫：打出来那一下头前下方三短线两点墨星，.3s 散开淡出——画在精灵外的屏幕层，不会顶边裁切
+    if (h.akName === 'sneeze') {
+      const u = t - h.akSeit - .63;
+      if (u >= 0 && u < .3) {
+        const pr = u / .3, weich = 1 - Math.pow(1 - pr, 3);   // 先快后慢（烟花同款包络）
+        const ox = p.x, oy = h.cy + p.mass * .4;
+        const spreiz = [.6, 0, -.6], fall = [.38, .62, .38];
+        for (let f = 0; f < 3; f++) {
+          const rx = spreiz[f] * p.mass * (.14 + .34 * weich), ry = fall[f] * p.mass * (.14 + .34 * weich);
+          bodenStift.zug([{ x: ox + rx, y: oy + ry }, { x: ox + rx * 1.28, y: oy + ry * 1.3 }],
+            { spur: `nies${i}-${f}`, w: 1, deckung: .5 * (1 - pr), eckig: true });
+        }
+        bodenStift.punkt({ x: ox + .48 * p.mass * (.2 + .3 * weich), y: oy + .52 * p.mass * (.2 + .34 * weich) }, p.mass * .022, UI_PAL.tinte, { spur: `niesp${i}a`, deckung: .4 * (1 - pr) });
+        bodenStift.punkt({ x: ox - .48 * p.mass * (.2 + .3 * weich), y: oy + .52 * p.mass * (.2 + .34 * weich) }, p.mass * .017, UI_PAL.tinte, { spur: `niesp${i}b`, deckung: .4 * (1 - pr) });
+      }
+    }
     ctx.globalAlpha = 1;
   }
   // 名字画在人群之上：可见人数少时才报名，淡入与人同步，样式与单人页一致

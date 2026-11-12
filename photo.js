@@ -224,6 +224,7 @@ function neuesKind(platz) {
     laune: null, launeBis: 0,   // 偶发小情绪（自己笑/恼/哭/打盹）
     naechsteLaune: 6 + strom(rec.seed, 'laune').n() * 18,
     ox: 0, oy: 0,               // 过场位移（走入/走出）
+    kameraBis: 0,               // 快门 0.3s 内看镜头（读时覆盖，不写 face/blink）
     zustand: 'da',              // da | geht | kommt
     seit: 0,
   };
@@ -480,6 +481,7 @@ function knips(t) {
     kinder[i].hopT = t + staffel++ * .06;   // 拍照齐跳（略错峰）
     kinder[i].hopAmp = .5;
   }
+  kinder.forEach((k) => { k.kameraBis = t + .3; });   // 快门 0.3s 全员看镜头：平静脸摆姿势的那一拍
   if (erste && jahrbuch.size >= 7) {        // 补全第七种的那张触发一次：全班再错峰齐跳，庆毕业
     let feier = 0;
     kinder.forEach((k, ki) => {
@@ -1200,6 +1202,7 @@ function rahmen(now) {
       zx = Math.sin(w) * .65 + Math.sin(w * 2.3 + 1.6) * .35;
       zy = Math.sin(w * .8 + 2.2) * .4;
     }
+    if (t < kind.kameraBis) { zx = 0; zy = 0; }   // 看镜头：视线目标归正，gleit 自带平滑转向
     const gleit = 1 - Math.exp(-dt * 8);
     kind.bx += (zx - kind.bx) * gleit;
     kind.by += (zy - kind.by) * gleit;
@@ -1208,7 +1211,8 @@ function rahmen(now) {
     const hop = hopDt >= 0 && hopDt < .7
       ? -Math.sin(hopDt / .7 * Math.PI) * kind.hopAmp * kind.k
       : 0;
-    drawDoodle(ctx, kind.rec, kind.x, kind.footY, kind.k, t, { blink: qt < kind.blinkBis, hop, face: kind.face, blick: { x: kind.bx, y: kind.by } });
+    const kamera = t < kind.kameraBis;   // 摆姿势：平静脸（各自配方眼型保留瞳点，视线才看得见）+ 不眨眼
+    drawDoodle(ctx, kind.rec, kind.x, kind.footY, kind.k, t, { blink: kamera ? false : qt < kind.blinkBis, hop, face: kamera ? 'ruhig' : kind.face, blick: { x: kind.bx, y: kind.by } });
     zeichneName(kind);
   }
   for (const i of gewaehlt) {

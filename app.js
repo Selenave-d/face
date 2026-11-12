@@ -2476,8 +2476,31 @@ const AKTIONEN = {
       return p;
     },
   },
+  // 打喷嚏：吸气后仰憋一拍（预备要长）——猛地前顿打出来（就两三帧），再缓回正。
+  // 后仰 -.17 抬帽顶约 .2，仍吃 .95 精灵余量；dy 只取正值（后仰已抬帽顶，再叠上抛会爆画布）
+  sneeze: {
+    periode: 1.5,
+    pose(q) {
+      const p = neutralPose();
+      const t = (((q / 1.5) % 1) + 1) % 1;
+      let nick = 0, dy = 0, w = 0;   // w：手跟着打出来的那一下甩起的量
+      if (t < .3) { const b = smooth(t / .3); nick = -.17 * b; dy = .02 * b; }   // 吸气：渐后仰
+      else if (t < .42) { nick = -.17; dy = .02; }                                // 憋住一拍
+      else if (t < .62) { const f = Math.pow((t - .42) / .2, .5); nick = -.17 + .48 * f; dy = .02 + .07 * f; w = f; }   // 前顿：快攻（pow<1 起手陡）
+      else if (t < .72) { nick = .31; dy = .09; w = 1; }                          // 打出来：顿在前下
+      else { const v = smooth((t - .72) / .28); nick = .31 * (1 - v); dy = .09 * (1 - v); w = 1 - v; }   // 缓回正
+      p.kopfNick = nick;   // 正=低头：吸气后仰(负)→打出来前顿(正)，喷嚏的两段头姿（kopfNick 在 clamp 之后施加，可越过 POSE_LIMIT.pitch）
+      p.dy = dy;           // 打出来那一下往下微沉
+      for (let i = 0; i < 2; i++) {
+        const s = i ? 1 : -1;
+        p.arm[i] = { ex: s * .16 * w, ey: -.04 * w, hx: s * .38 * w, hy: -.2 * w };   // 手甩起：外上挥，保长重投自动定长（量级远小于挥手 ±1.5）
+        p.bein[i] = { kx: 0, ky: 0, fx: 0, fy: -2 * dy };   // 踝补偿 -2×dy：脚钉地（同 bow）
+      }
+      return p;
+    },
+  },
 };
-const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance', 'bow'];
+const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance', 'bow'];   // 键盘 1-6 专属；sneeze 是 crowd 稀有动作，不进单人页
 
 /* ---------------- 骨架工具 ---------------- */
 
