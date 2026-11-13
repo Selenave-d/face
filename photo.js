@@ -1169,8 +1169,8 @@ function rahmen(now) {
   const geordnet = [...kinder].sort((a, b) => (a.g.hinten ? 0 : 1) - (b.g.hinten ? 0 : 1));
   const qt = Math.floor(t * 12) / 12;
   for (const kind of geordnet) {
-    // 眨眼计时（12fps 量化）
-    if (qt > kind.naeBlink) {
+    // 眨眼计时（12fps 量化）；睡着的眼本是闭弧、blink 算了也被 face 短路——不排钟，醒来那拍多半立即补一眨（刚醒眨眨眼）
+    if (qt > kind.naeBlink && kind.face !== 'schlaeft') {
       kind.blinkBis = qt + .14;
       kind.naeBlink = qt + 1.5 + kind.blinkWuerfel() * 4;
     }

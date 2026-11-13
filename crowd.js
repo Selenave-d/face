@@ -237,7 +237,8 @@ canvas.addEventListener('click', (e) => {
   if (best >= 0) {
     const jetzt = performance.now() / 1000;
     // 连点节流（同单人页 waehleAktion 规则）：0.25s 过渡期内重复点同一人会把挥手起手反复重掷、冻在插值半路
-    if (!(leute[best].akName === 'wave' && jetzt - leute[best].akSeit < .25))
+    if (!(leute[best].akName === 'wave' && jetzt - leute[best].akSeit < .25)
+      && !/^highfive/.test(leute[best].akName))   // 击掌是双人戏：戳走一人=另一人对空气拍，忍到 1.4s 演完
       leute[best].setAktion('wave', jetzt, AKTIONEN.wave.periode);
   }
 });
@@ -371,6 +372,7 @@ function feierTick(t) {
  * 偶尔跳/踏步）——稀疏人群不再是雕像墙。app.js 的自动动作门对 CROWD 整页关着（怕 48 人互挤），
  * 这里自设节流只挑可见站定者，精灵键含 akName 自动失效重画，akBis 到点自动回 stand */
 let kleinBei = 0;
+let klatsch = null;   // 进行中的击掌对（站位下标 i/j 与起拍时刻；星光层与打断守卫共用）
 function kleinTick(t) {
   const sicht = sichtbarAus(wert);
   if (feier || sicht > 5.5 || ziehe) { kleinBei = t + 3; return; }   // 满编庆祝/人多大编/拖滑块时停掷并防积压
@@ -379,12 +381,29 @@ function kleinTick(t) {
   const kand = [];
   for (let i = 0; i < plaetze.length; i++) {
     const p = plaetze[i], h = leute[i];
-    if (clamp(sicht - p.rang, 0, 1) >= 1 && h.akName === 'stand' && !h.akVon) kand.push(h);
+    if (clamp(sicht - p.rang, 0, 1) >= 1 && h.akName === 'stand' && !h.akVon) kand.push(i);
   }
   if (!kand.length) return;
   const r = Math.random();
+  if (r < .07) {   // 击掌：同排相邻、个头相近（差 12% 内掌心才对得齐）且够得着（掌心各伸 ~1.5）的两人互拍；找不到合格对回落单人链
+    let bestA = -1, bestB = -1, bestDx = 1e9;
+    for (let a = 0; a < kand.length; a++) for (let b = a + 1; b < kand.length; b++) {
+      const pa = plaetze[kand[a]], pb = plaetze[kand[b]];
+      if (pa.reihe !== pb.reihe) continue;
+      if (Math.abs(pa.mass - pb.mass) > .12 * Math.min(pa.mass, pb.mass)) continue;
+      const dx = Math.abs(pa.x - pb.x);
+      if (dx < bestDx && dx < 1.5 * (pa.mass + pb.mass)) { bestDx = dx; bestA = a; bestB = b; }
+    }
+    if (bestA >= 0) {
+      const [li, re] = plaetze[kand[bestA]].x < plaetze[kand[bestB]].x ? [kand[bestA], kand[bestB]] : [kand[bestB], kand[bestA]];
+      leute[li].setAktion('highfiveR', t, AKTIONEN.highfiveR.periode);   // 左位者伸右臂
+      leute[re].setAktion('highfiveL', t, AKTIONEN.highfiveL.periode);   // 右位者伸左臂——同一 t 同一周期，qt 量化下逐帧同步
+      klatsch = { i: li, j: re, bei: t };
+      return;
+    }
+  }
   const name = r < .48 ? 'wave' : r < .72 ? 'jump' : r < .86 ? 'walk' : r < .96 ? 'bow' : 'sneeze';   // bow 十分之一：偶见躬身谢幕；sneeze 廿五分之一：更稀有的喷嚏。pitch 会抬帽顶 .2-.3，不裁顶实靠 .95 余量——别再叠上抛
-  kand[(Math.random() * kand.length) | 0].setAktion(name, t, AKTIONEN[name].periode);
+  leute[kand[(Math.random() * kand.length) | 0]].setAktion(name, t, AKTIONEN[name].periode);
 }
 
 let knallStift = null, knallTick = -1;
@@ -552,6 +571,27 @@ function rahmen(now) {
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+  }
+  // 击掌星光：命中那一下（起拍 +.39s）两人中点绽四道短芒+两粒墨点，.3s 散开淡出（先快后慢，喷嚏飞沫同款包络）
+  if (klatsch) {
+    const pi = plaetze[klatsch.i], pj = plaetze[klatsch.j];
+    if (leute[klatsch.i].akName !== 'highfiveR' || leute[klatsch.j].akName !== 'highfiveL') klatsch = null;   // 有人被打断即熄星，不对空气放烟花
+    else {
+      const u = t - klatsch.bei - .39;
+      if (u >= 0 && u < .3) {
+        const pr = u / .3, weich = 1 - Math.pow(1 - pr, 3);
+        const kx = (pi.x + pj.x) / 2, ky = (pi.bodenY + pj.bodenY) / 2 - 4.5 * (pi.mass + pj.mass) / 2;   // 掌心约定：离地 4.5 世界单位（个头相近门保证两人掌高一致）
+        const str = (pi.mass + pj.mass) / 2 * (.1 + .22 * weich);
+        for (let f = 0; f < 4; f++) {
+          const ax = f % 2 ? .8 : -.8, ay = f < 2 ? -.65 : .65;
+          bodenStift.zug([{ x: kx + ax * str * .45, y: ky + ay * str * .45 }, { x: kx + ax * str, y: ky + ay * str }],
+            { spur: `klatsch${f}`, w: 1, deckung: .55 * (1 - pr), eckig: true });
+        }
+        bodenStift.punkt({ x: kx + .95 * str, y: ky - .3 * str }, (pi.mass + pj.mass) / 2 * .02, UI_PAL.tinte, { spur: 'klatschp1', deckung: .4 * (1 - pr) });
+        bodenStift.punkt({ x: kx - .95 * str, y: ky + .35 * str }, (pi.mass + pj.mass) / 2 * .016, UI_PAL.tinte, { spur: 'klatschp2', deckung: .4 * (1 - pr) });
+      }
+      if (t - klatsch.bei > AKTIONEN.highfiveR.periode) klatsch = null;
+    }
   }
   raketenZeichnen(t);
   schieberZeichnen(t);

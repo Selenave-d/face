@@ -2351,6 +2351,29 @@ const TAU = Math.PI * 2;
 const holdSin = (t, p = .45) => { const s = Math.sin(t * TAU); return (s < 0 ? -1 : 1) * Math.pow(Math.abs(s), p); };
 const lift = (t) => Math.max(0, Math.sin(t * TAU));
 
+// 击掌 pose 工厂：s=+1 伸向画面右（左位者）、s=-1 伸向画面左（右位者）——pose 无实例参数，
+// 方向只能拆两名注册（highfiveR/L），由 crowd 触发端按谁左谁右指派；纵向偏移照 wave 随身材缩放
+const highfivePose = (s) => (q, dna) => {
+  const p = neutralPose();
+  const t = (((q / 1.4) % 1) + 1) % 1;
+  let a;   // 伸手量 0..1：抬臂 .39s（缓出）→ 顶住 .18s（≥2 个 12fps 帧的接触平台：两精灵各掷换帧相位，短了会差一拍穿帮）→ 慢收 .83s（意犹未尽）
+  if (t < .28) a = smooth(t / .28);
+  else if (t < .41) a = 1;
+  else a = 1 - smooth((t - .41) / .59);
+  const kopfH = dna.kopf.ry * 1.9, bl = dna.koerper.ratio * kopfH;
+  const akt = s < 0 ? 0 : 1;   // 活动臂 = 伸手方向那一侧：左位者伸自己的右臂，镜像天然成立
+  p.arm[akt] = { ex: s * .9 * a, ey: -.26 * bl * a, hx: s * 1.25 * a, hy: (.12 - .52 * (bl + kopfH)) * a };   // 上臂斜上外展+前臂再向上外拍，保长重投自动定长（腕点 ≤~1.7 不撞 2.2 精灵半宽墙）
+  p.arm[1 - akt] = {   // 休息臂：抄 wave 的呼吸微摆（向身体收、与身体节拍错相）
+    ex: -s * .03 + .012 * Math.sin(q * 1.5 + dna.taktVersatz * 6 + 2),
+    ey: .03 + .008 * Math.sin(q * 2.2 + 1),
+    hx: -s * .06, hy: .04,
+  };
+  p.lean = s * .07 * a;   // 身体向同伴微倾（髋不动肩带倾）
+  p.dx = s * .05 * a;     // 向同伴蹭半步
+  p.kopfRoll = s * .05 * a;   // 头也歪向同伴一点
+  return p;
+};
+
 const AKTIONEN = {
   // 站立：呼吸起伏 + 极轻微重心摇摆，不是雕像
   stand: {
@@ -2499,8 +2522,11 @@ const AKTIONEN = {
       return p;
     },
   },
+  // 击掌：同排相邻两人互拍（crowd.js kleinTick 成对触发，两名同 t 同周期逐帧同步；接触相位 .28*1.4≈.39s）
+  highfiveR: { periode: 1.4, pose: highfivePose(1) },
+  highfiveL: { periode: 1.4, pose: highfivePose(-1) },
 };
-const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance', 'bow'];   // 键盘 1-6 专属；sneeze 是 crowd 稀有动作，不进单人页
+const AKTION_NAMEN = ['stand', 'wave', 'walk', 'jump', 'dance', 'bow'];   // 键盘 1-6 专属；sneeze/highfive 是 crowd 稀有动作，不进单人页
 
 /* ---------------- 骨架工具 ---------------- */
 

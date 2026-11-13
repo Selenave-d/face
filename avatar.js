@@ -201,9 +201,10 @@ function gesichtAktion(art) {
   const t = performance.now() / 1000;
   if (art === 'sprich') einmal.sprichBis = t + 1.5;
   else if (art === 'blinz') einmal.blinzPlan = [t + .05, t + .45, t + .9];
-  else if (art === 'aufwachen') {   // 回神：清表情、清视线
+  else if (art === 'aufwachen') {   // 回神：清表情、清视线、掐掉进行中的一句话/三连眨（「换一个」同款清法）
     gesichtForm = null; blickZiel = null;
     kopf.gesicht = null;
+    einmal.sprichBis = 0; einmal.blinzPlan = null;
     setTimeout(frisch, 1300);       // 等弹簧回到日常再刷新导出快照
   } else if (GESICHT_FORMEN[art]) {   // 表情开关：再点一次取消
     gesichtForm = gesichtForm === art ? null : art;
@@ -283,6 +284,11 @@ canvas.addEventListener('click', () => gesichtAktion(GESTEN[(Math.random() * GES
 function gesichtKnopfe() {
   for (const b of gesichtKnopfListe) {
     const g = b.dataset.g;
+    if (g === 'sprich' || g === 'blinz' || g === 'aufwachen') {   // 瞬时动作不是开关：不挂 aria-pressed（挂了=读屏把它当永远弹起的切换钮）
+      b.classList.remove('an');
+      b.removeAttribute('aria-pressed');
+      continue;
+    }
     const an = g === gesichtForm || (blickZiel && ((g === 'links' && blickZiel.x < 0) || (g === 'rechts' && blickZiel.x > 0)));
     b.classList.toggle('an', !!an);
     b.setAttribute('aria-pressed', an ? 'true' : 'false');   // 读屏同享激活态，不只靠颜色
