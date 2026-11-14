@@ -280,6 +280,17 @@ gesichtKnopfListe.forEach((b) => {
 });
 canvas.addEventListener('click', () => gesichtAktion(GESTEN[(Math.random() * GESTEN.length) | 0]));
 
+// 表情键盘热键：1-9 按 GESTEN 顺序对应前九枚手势按钮、0 回神（键位即按钮排列顺序，看着按钮就能盲按）；
+// Escape 同义回神——一墙脸放大态 Esc「清表情回日常」的同款肌肉记忆，本页无其它 Esc 消费者。
+// repeat 拦长按连发（表情/视线是开关，连按会闪烁翻转）；Ctrl/Cmd/Alt 组合是浏览器快捷键，放行
+addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Escape') { gesichtAktion('aufwachen'); return; }
+  const i = '1234567890'.indexOf(e.key);
+  if (i >= 0) gesichtAktion(i < 9 ? GESTEN[i] : 'aufwachen');
+});
+
 // 开关态同步到按钮样式（按钮列表已缓存，不每帧查询）
 function gesichtKnopfe() {
   for (const b of gesichtKnopfListe) {

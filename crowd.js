@@ -406,6 +406,43 @@ function kleinTick(t) {
   leute[kand[(Math.random() * kand.length) | 0]].setAktion(name, t, AKTIONEN[name].periode);
 }
 
+/* 喷嚏传染：有人打出喷嚏的那一下，~35% 把同排横向最近的站定邻居排个 0.6-1.1s 延迟喷嚏。
+ * 队列照烟花 raketen 的语义（绝对时刻、到点即删、feier 清残弹）；存 Head 引用不存站位下标
+ * ——resize 会重排 plaetze 下标，Head 对象跨 resize 存活，缩编截掉也只是 indexOf 得 -1 丢弃。
+ * niesKontakt 是代际标记：传染出的喷嚏不再传染，连锁一代即止（均值 .35 的分支过程本会自然熄灭，
+ * 代际标记额外挡掉 A→B→A 往返的观感瑕疵） */
+const niesAnsteck = [];
+function niesAnsteckung(i, t) {
+  if (leute[i].niesKontakt) return;
+  const p = plaetze[i], sicht = sichtbarAus(wert);
+  let best = -1, bestDx = 1e9;
+  for (let j = 0; j < plaetze.length; j++) {
+    if (j === i) continue;
+    const q = plaetze[j], n = leute[j];
+    if (q.reihe !== p.reihe) continue;                 // 同排
+    if (clamp(sicht - q.rang, 0, 1) < 1) continue;     // 站稳（kleinTick 同款判据）
+    if (n.akName !== 'stand' || n.akVon) continue;
+    const dx = Math.abs(q.x - p.x);
+    if (dx < bestDx) { bestDx = dx; best = j; }
+  }
+  if (best < 0 || Math.random() >= .35) return;
+  niesAnsteck.push({ h: leute[best], bei: t + .6 + Math.random() * .5 });
+}
+function niesAnsteckTick(t) {
+  for (let k = niesAnsteck.length - 1; k >= 0; k--) {
+    const e = niesAnsteck[k];
+    if (t < e.bei) continue;
+    niesAnsteck.splice(k, 1);
+    if (feier) continue;                                // 满编庆祝接管：清残弹
+    const i = leute.indexOf(e.h);
+    if (i < 0) continue;                                // 跨档缩编把人收走了
+    if (e.h.akName !== 'stand' || e.h.akVon) continue;  // 0.6-1.1s 里可能已被逗弄/掷中，开火前再验
+    if (clamp(sichtbarAus(wert) - plaetze[i].rang, 0, 1) < 1) continue;
+    e.h.niesKontakt = true;
+    e.h.setAktion('sneeze', t, AKTIONEN.sneeze.periode);
+  }
+}
+
 let knallStift = null, knallTick = -1;
 
 function raketenZeichnen(t) {
@@ -498,6 +535,7 @@ function rahmen(now) {
   papierSchnell();
   feierTick(t);
   kleinTick(t);
+  niesAnsteckTick(t);
 
   // 地面线：比最前排的脚再低几像素，画在人群后面，身体自然盖住脚后的线
   const bt = Math.floor(t * 8);
@@ -519,8 +557,8 @@ function rahmen(now) {
     h.update(dt, t, pointer);
     // 打喷嚏：打出来那一下（起手 .63s，pose 前顿段起点）闭一下眼；blinzeltBis 顺手把精灵换帧率提到 24fps
     if (h.akName === 'sneeze') {
-      if (!h.niesBl && t - h.akSeit > .63) { h.niesBl = true; h.blinzeltBis = t + .14; }
-    } else h.niesBl = false;
+      if (!h.niesBl && t - h.akSeit > .63) { h.niesBl = true; h.blinzeltBis = t + .14; niesAnsteckung(i, t); }
+    } else { h.niesBl = false; h.niesKontakt = false; }   // 离开 sneeze 即清「传染代」标记
     h.zeigeName = false;   // 名字改在人群之上统一画（循环后），不再被前排身体盖住
     if (alpha < 1) ctx.globalAlpha = alpha;
     // 脚下影子：三根短斜线，跳起时人离地、影子钉在原地并收窄变淡
@@ -575,20 +613,25 @@ function rahmen(now) {
   // 击掌星光：命中那一下（起拍 +.39s）两人中点绽四道短芒+两粒墨点，.3s 散开淡出（先快后慢，喷嚏飞沫同款包络）
   if (klatsch) {
     const pi = plaetze[klatsch.i], pj = plaetze[klatsch.j];
-    if (leute[klatsch.i].akName !== 'highfiveR' || leute[klatsch.j].akName !== 'highfiveL') klatsch = null;   // 有人被打断即熄星，不对空气放烟花
+    if (!pi || !pj || !leute[klatsch.i] || !leute[klatsch.j]) klatsch = null;   // 跨档缩编把下标截没了（resize 也顺手清，双保险）
+    else if (leute[klatsch.i].akName !== 'highfiveR' || leute[klatsch.j].akName !== 'highfiveL') klatsch = null;   // 有人被打断即熄星，不对空气放烟花
     else {
       const u = t - klatsch.bei - .39;
       if (u >= 0 && u < .3) {
         const pr = u / .3, weich = 1 - Math.pow(1 - pr, 3);
-        const kx = (pi.x + pj.x) / 2, ky = (pi.bodenY + pj.bodenY) / 2 - 4.5 * (pi.mass + pj.mass) / 2;   // 掌心约定：离地 4.5 世界单位（个头相近门保证两人掌高一致）
-        const str = (pi.mass + pj.mass) / 2 * (.1 + .22 * weich);
-        for (let f = 0; f < 4; f++) {
-          const ax = f % 2 ? .8 : -.8, ay = f < 2 ? -.65 : .65;
-          bodenStift.zug([{ x: kx + ax * str * .45, y: ky + ay * str * .45 }, { x: kx + ax * str, y: ky + ay * str }],
-            { spur: `klatsch${f}`, w: 1, deckung: .55 * (1 - pr), eckig: true });
+        // 双方可见度取弱者：双双被拖出可见域就不放鬼火，半淡出时星光跟着人淡
+        const sichtbar = Math.min(clamp(sicht - pi.rang, 0, 1), clamp(sicht - pj.rang, 0, 1));
+        if (sichtbar > 0) {
+          const kx = (pi.x + pj.x) / 2, ky = (pi.bodenY + pj.bodenY) / 2 - 4.5 * (pi.mass + pj.mass) / 2;   // 掌心约定：离地 4.5 世界单位（个头相近门保证两人掌高一致）
+          const str = (pi.mass + pj.mass) / 2 * (.1 + .22 * weich);
+          for (let f = 0; f < 4; f++) {
+            const ax = f % 2 ? .8 : -.8, ay = f < 2 ? -.65 : .65;
+            bodenStift.zug([{ x: kx + ax * str * .45, y: ky + ay * str * .45 }, { x: kx + ax * str, y: ky + ay * str }],
+              { spur: `klatsch${f}`, w: 1, deckung: .55 * (1 - pr) * sichtbar, eckig: true });
+          }
+          bodenStift.punkt({ x: kx + .95 * str, y: ky - .3 * str }, (pi.mass + pj.mass) / 2 * .02, UI_PAL.tinte, { spur: 'klatschp1', deckung: .4 * (1 - pr) * sichtbar });
+          bodenStift.punkt({ x: kx - .95 * str, y: ky + .35 * str }, (pi.mass + pj.mass) / 2 * .016, UI_PAL.tinte, { spur: 'klatschp2', deckung: .4 * (1 - pr) * sichtbar });
         }
-        bodenStift.punkt({ x: kx + .95 * str, y: ky - .3 * str }, (pi.mass + pj.mass) / 2 * .02, UI_PAL.tinte, { spur: 'klatschp1', deckung: .4 * (1 - pr) });
-        bodenStift.punkt({ x: kx - .95 * str, y: ky + .35 * str }, (pi.mass + pj.mass) / 2 * .016, UI_PAL.tinte, { spur: 'klatschp2', deckung: .4 * (1 - pr) });
       }
       if (t - klatsch.bei > AKTIONEN.highfiveR.periode) klatsch = null;
     }
@@ -606,6 +649,7 @@ function resize() {
   canvas.style.width = innerWidth + 'px';
   canvas.style.height = innerHeight + 'px';
   platzeLegen();
+  klatsch = null;   // 重排会打乱站位下标（跨档缩编还会截断 leute）——击掌状态作废，星光层另有下标空值双保险
 }
 addEventListener('resize', resize);
 // GPU 上下文恢复后精灵底片被清空——置空让下一帧 miss 重烘（app.js 层已清 papier/grain/heads）
