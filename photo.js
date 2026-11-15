@@ -223,6 +223,8 @@ function neuesKind(platz) {
     launeWuerfel: strom(rec.seed, 'laune').n,
     laune: null, launeBis: 0,   // 偶发小情绪（自己笑/恼/哭/打盹）
     naechsteLaune: 6 + strom(rec.seed, 'laune').n() * 18,
+    tippVon: -9,                // 垫脚偷看镜头：后排专属彩蛋，读时包络（hopT/kameraBis 同款不落状态）
+    naechsteTipp: 10 + strom(rec.seed, 'tipp').n() * 26,
     ox: 0, oy: 0,               // 过场位移（走入/走出）
     kameraBis: 0,               // 快门 0.3s 内看镜头（读时覆盖，不写 face/blink）
     zustand: 'da',              // da | geht | kommt
@@ -1184,6 +1186,7 @@ function rahmen(now) {
         kind.laune = null;
       }
     } else if (phase === 'idle' && kind.zustand === 'da' && kind.face === 'ruhig'
+      && t - kind.tippVon > 2.2   // 垫脚表演中不塞情绪（姿态彩蛋与情绪互斥）
       && !gewaehlt.has(kinder.indexOf(kind)) && t > kind.naechsteLaune) {
       const r = kind.launeWuerfel();
       kind.laune = r < .38 ? 'froh' : r < .6 ? 'boese' : r < .78 ? 'schlaeft' : 'weint';
@@ -1191,6 +1194,18 @@ function rahmen(now) {
       kind.launeBis = t + 1.6 + kind.launeWuerfel() * 1.9;
       kind.naechsteLaune = kind.launeBis + 7 + kind.launeWuerfel() * 18;
     }
+    // 后排垫脚偷看：独立钟（不进 laune 池——那是情绪，这是姿态；laune 表达不了「仅后排」）
+    else if (kind.g && kind.g.hinten && phase === 'idle' && kind.zustand === 'da' && kind.face === 'ruhig'
+      && !gewaehlt.has(kinder.indexOf(kind)) && t > kind.naechsteTipp) {
+      kind.tippVon = t;
+      kind.naechsteTipp = t + 14 + strom(kind.rec.seed, 'tipp').n() * 24;
+    }
+    // 垫脚包络：.3s 踮起（缓出=小心踮）→ 1.3s 撑住 → .3s 落回；读时算，不落状态
+    const tippDt = t - kind.tippVon;
+    const tipp = tippDt >= 0 && tippDt < 1.9
+      ? (tippDt < .3 ? smooth(tippDt / .3)
+        : tippDt > 1.6 ? smooth((1.9 - tippDt) / .3) : 1)
+      : 0;
     // 视线：指针凑近就盯着指针看，否则各自慢慢东张西望
     let zx, zy;
     if (pointer.active && kind.zustand === 'da'
@@ -1203,6 +1218,7 @@ function rahmen(now) {
       zy = Math.sin(w * .8 + 2.2) * .4;
     }
     if (t < kind.kameraBis) { zx = 0; zy = 0; }   // 看镜头：视线目标归正，gleit 自带平滑转向
+    else if (tipp > 0) { zx = 0; zy = 0; }        // 垫脚偷看：表演期间视线也归正（kamera > tipp > 指针 > 游走）
     const gleit = 1 - Math.exp(-dt * 8);
     kind.bx += (zx - kind.bx) * gleit;
     kind.by += (zy - kind.by) * gleit;
@@ -1212,7 +1228,7 @@ function rahmen(now) {
       ? -Math.sin(hopDt / .7 * Math.PI) * kind.hopAmp * kind.k
       : 0;
     const kamera = t < kind.kameraBis;   // 摆姿势：平静脸（各自配方眼型保留瞳点，视线才看得见）+ 不眨眼
-    drawDoodle(ctx, kind.rec, kind.x, kind.footY, kind.k, t, { blink: kamera ? false : qt < kind.blinkBis, hop, face: kamera ? 'ruhig' : kind.face, blick: { x: kind.bx, y: kind.by } });
+    drawDoodle(ctx, kind.rec, kind.x, kind.footY, kind.k, t, { blink: kamera ? false : qt < kind.blinkBis, hop, tipp, face: kamera ? 'ruhig' : kind.face, blick: { x: kind.bx, y: kind.by } });
     zeichneName(kind);
   }
   for (const i of gewaehlt) {

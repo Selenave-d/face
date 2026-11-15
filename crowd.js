@@ -238,7 +238,8 @@ canvas.addEventListener('click', (e) => {
     const jetzt = performance.now() / 1000;
     // 连点节流（同单人页 waehleAktion 规则）：0.25s 过渡期内重复点同一人会把挥手起手反复重掷、冻在插值半路
     if (!(leute[best].akName === 'wave' && jetzt - leute[best].akSeit < .25)
-      && !/^highfive/.test(leute[best].akName))   // 击掌是双人戏：戳走一人=另一人对空气拍，忍到 1.4s 演完
+      && !/^highfive/.test(leute[best].akName)    // 击掌是双人戏：戳走一人=另一人对空气拍，忍到 1.4s 演完
+      && leute[best].akName !== 'sneeze')         // 喷嚏戳掉会静默掐灭传染判定，也忍到 1.5s 演完
       leute[best].setAktion('wave', jetzt, AKTIONEN.wave.periode);
   }
 });
@@ -299,7 +300,7 @@ function uiSync() {
   zahlEl.textContent = n;
   zaehlerEl.textContent = n + ' / 500';
   schieberEl.setAttribute('aria-valuenow', n);
-  schieberEl.setAttribute('aria-valuetext', n + ' 个朋友');
+  schieberEl.setAttribute('aria-valuetext', Math.round(sichtbarAus(n)) + ' 个朋友（刻度 ' + n + '）');   // 本页机关是非线性映射：刻度≠人数，报真人数
 }
 
 /* ================= 庆祝：满 500 全员起跳 + 烟花 ================= */

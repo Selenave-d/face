@@ -502,12 +502,14 @@ function zeichneZzz(stift, rec, k, qt) {
   if (auf > 2) return;
   const fade = auf > 1 ? 2 - auf : 1;
   const R = .44 * rec.skull.s * k;
+  // 锚取头宽基准与耳角锚的较大者：注释按 RX 推导、代码却用不含宽度因子的 R——宽头(wf·1.14>1)时魇角尖 .89RX≈1.116R 会贴上第一枚 z
+  const AX = Math.max(R, R * rec.skull.wf * (rec.skull.shape === 'wide' ? 1.14 : 1));
   const z = (x, y, g, label, alpha) => {
     stift.line([[x, y], [x + g, y], [x, y + g * .9], [x + g, y + g * .9]], 1.2, { label, alpha });
   };
   // 起点外移到耳/角区外（熊耳 x≤.84RX、魇角尖≤.89RX）：原 R*.7 落在熊右耳内、擦魇角上段
-  z(R * 1.12, -1.5 * k, .09 * k, 210, .5 * fade);
-  z(R * 1.38, -1.66 * k, .12 * k, 211, .7 * fade);
+  z(AX * 1.12, -1.5 * k, .09 * k, 210, .5 * fade);
+  z(AX * 1.38, -1.66 * k, .12 * k, 211, .7 * fade);
 }
 
 function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
@@ -1116,14 +1118,16 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig', qt = 0) {
  * 站着时垫在脚掌旁，起跳后留在原地——人离地、记号钉地，重量感就有了 */
 function zeichneBoden(stift, k, anim) {
   if (anim.flach) return;   // 贴纸条 kK≈20-25px 太挤，不画
+  // 跳起时记号收窄变淡（人离地，地上的笔触跟着轻掉——crowd 影子 schrumpf 同款语义）
+  const sc = 1 - Math.min(1, Math.max(0, -(anim.hop ?? 0) / k)) * .45;
   for (const s of [-1, 1]) {
-    stift.line([[s * .08 * k, .014 * k], [s * .2 * k, .004 * k], [s * .27 * k, .016 * k]], 1.1, { label: 177 + s, alpha: .4 });
-    stift.line([[s * .11 * k, .032 * k], [s * .16 * k, .026 * k]], .9, { label: 178 + s, alpha: .3 });
+    stift.line([[s * .08 * k * sc, .014 * k], [s * .2 * k * sc, .004 * k], [s * .27 * k * sc, .016 * k]], 1.1, { label: 177 + s, alpha: .4 * sc });
+    stift.line([[s * .11 * k * sc, .032 * k], [s * .16 * k * sc, .026 * k]], .9, { label: 178 + s, alpha: .3 * sc });
   }
 }
 
 /* ================= 整只绘制 =================
- * (X, footY) 是脚底位置，k = 像素/单位。anim = { blink, hop(px, 负值向上) }
+ * (X, footY) 是脚底位置，k = 像素/单位。anim = { blink, hop(px, 负值向上), tipp(0..1 踮脚量) }
  */
 
 function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
@@ -1140,7 +1144,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   ctx.save();
   ctx.translate(X, footY);
   zeichneBoden(stift, k, anim);   // 地面速写：跟脚点不跟跳——起跳时记号留在原地
-  ctx.translate(0, bob + (anim.hop ?? 0));
+  ctx.translate(0, bob + (anim.hop ?? 0) - (anim.tipp ?? 0) * .10 * k);   // 垫脚：整人抬 .10k（负 y 向上，同 hop 约定）
 
   // 尾巴在身体后面
   zeichneSchwanz(stift, rec, k, wag);
@@ -1156,10 +1160,11 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   brx *= masse; bry *= Math.sqrt(masse);
   const gliedW = 1.4 * (.8 + .2 * brx / .26);   // 肢宽随幅面：bean≈1.29 / round 1.4 / pear≈1.43（腿在前面消费，声明得在此）
 
-  // 腿与脚：细棍（肢宽与手臂同调幅面）
+  // 腿与脚：细棍（肢宽与手臂同调幅面）。tipp 踮脚：踝伸长 .035k 绷小腿、趾补偿 .10k 钉回地面记号（脚掌≈47°，app.js 踝补偿的单次施加版）
+  const tipp = anim.tipp ?? 0;
   for (const s of [-1, 1]) {
-    stift.line([[s * .1 * k, -.12 * k], [s * .13 * k, -.01 * k]], gliedW, { label: 170 + s });
-    stift.line([[s * .13 * k - (s > 0 ? .01 * k : -.01 * k), -.01 * k], [s * .19 * k, -.01 * k]], gliedW, { label: 172 + s });
+    stift.line([[s * .1 * k, -.12 * k], [s * .13 * k, -.01 * k + tipp * .035 * k]], gliedW, { label: 170 + s });
+    stift.line([[s * .13 * k - (s > 0 ? .01 * k : -.01 * k), -.01 * k + tipp * .035 * k], [s * .19 * k, -.01 * k + tipp * .10 * k]], gliedW, { label: 172 + s });
   }
   // 身体（顶缘钉 −.54k）
   const kCy = -.54 * k + bry * k;

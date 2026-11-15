@@ -209,7 +209,7 @@ function gesichtAktion(art) {
   } else if (GESICHT_FORMEN[art]) {   // 表情开关：再点一次取消
     gesichtForm = gesichtForm === art ? null : art;
     kopf.gesicht = gesichtForm ? GESICHT_FORMEN[gesichtForm] : null;
-    setTimeout(frisch, gesichtForm === 'muede' ? 1300 : 200);   // 犯困要等眼皮垂下
+    setTimeout(frisch, 200);   // （原犯困等 1300ms 是死分支：schlaefrig 是静态笔划、导出又强制无表情）
   } else if (art === 'links' || art === 'rechts') {
     const ziel = { x: art === 'links' ? -.55 : .55, y: 0 };
     blickZiel = (blickZiel && blickZiel.x === ziel.x) ? null : ziel;   // 再点取消
