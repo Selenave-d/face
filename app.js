@@ -2297,17 +2297,19 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
   } else if (kragen === 'schal') {
     // 围巾：颈根一道宽绕弧 + 垂在肩前的一小头，尾端三笔流苏
     // （垂头守在肩块下缘 ~.2l 之内：胸像模式没有身体接在下面，伸出去就是悬空）
-    stift.zug([{ x: a.x - .1, y: a.y - .03 }, { x: mx, y: untenY + l * .13 }, { x: b.x + .1, y: b.y - .03 }],
+    // 横向常量挂 halb 归一：原绝对值 .1/.045 让窄脸围巾膨胀到颈宽 2.7 倍宽松垮、宽脸 2.2 倍贴脖——中位脸=1 两端同调
+    const sS = halb / .078;
+    stift.zug([{ x: a.x - .1 * sS, y: a.y - .03 }, { x: mx, y: untenY + l * .13 }, { x: b.x + .1 * sS, y: b.y - .03 }],
       { spur: 'schal', w: .034, wackel: .004, farbe: pal.tinte });
-    stift.zug([{ x: a.x - .04, y: a.y + .04 }, { x: mx, y: untenY + l * .17 }, { x: b.x + .04, y: b.y + .04 }],
+    stift.zug([{ x: a.x - .04 * sS, y: a.y + .04 }, { x: mx, y: untenY + l * .17 }, { x: b.x + .04 * sS, y: b.y + .04 }],
       { spur: 'schal2', w: .026, wackel: .004, farbe: pal.tinte });
     const sx = mx + halb * .6;
-    stift.zug([{ x: sx - .045, y: untenY + l * .13 }, { x: sx - .06, y: untenY + l * .18 }, { x: sx - .02, y: untenY + l * .2 }],
+    stift.zug([{ x: sx - .045 * sS, y: untenY + l * .13 }, { x: sx - .06 * sS, y: untenY + l * .18 }, { x: sx - .02 * sS, y: untenY + l * .2 }],
       { spur: 'schal3', w: .026, wackel: .004, farbe: pal.tinte, eckig: true });
-    stift.zug([{ x: sx + .03, y: untenY + l * .13 }, { x: sx + .04, y: untenY + l * .16 }, { x: sx + .075, y: untenY + l * .18 }],
+    stift.zug([{ x: sx + .03 * sS, y: untenY + l * .13 }, { x: sx + .04 * sS, y: untenY + l * .16 }, { x: sx + .075 * sS, y: untenY + l * .18 }],
       { spur: 'schal4', w: .026, wackel: .004, farbe: pal.tinte, eckig: true });
     for (let i = 0; i < 3; i++) {
-      stift.zug([{ x: sx - .05 + i * .045, y: untenY + l * .195 }, { x: sx - .045 + i * .045, y: untenY + l * .21 }],
+      stift.zug([{ x: sx - .05 * sS + i * .045 * sS, y: untenY + l * .195 }, { x: sx - .045 * sS + i * .045 * sS, y: untenY + l * .21 }],
         { spur: `schalfranse${i}`, w: .018, wackel: .003, farbe: pal.tinte, einlagig: true });
     }
   }
@@ -2628,13 +2630,27 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
       const armel = gliedKette([S, mitte, E], [armW * 1.35, armW * 1.2, armW * 1.05]);
       stift.flaeche(armel, { farbe: pal.stoff, spur: `armel${s}`, wackel: .004 });
       stift.zug(armel, { spur: `armel-rand${s}`, geschlossen: true, ...duenn });
-      // 袖口包绕线（沿链方向向下鼓）
+      // 袖口包绕线：鼓出方向 = 上臂轴 uA 向前臂出口向 uF 的夹角门控插值——大弯肘（jump/dance 前臂上折）
+      // 时开口背对前臂读作戳破袖口；≤20°（stand/walk/bow 天然肘折 ≤16°）零改动保住严格不动点，
+      // >63° 全量对准 uF（也规避对折时 uA+uF≈0 的角平分线除零）。端点钉袖管端边不挪，只转中点
       const nE = pathNormals([mitte, E])[1];
       const dirE = { x: E.x - mitte.x, y: E.y - mitte.y };
       const dl = Math.hypot(dirE.x, dirE.y) || 1;
+      const dW = { x: W.x - E.x, y: W.y - E.y };
+      const wl = Math.hypot(dW.x, dW.y) || 1;
+      const uAx = dirE.x / dl, uAy = dirE.y / dl;
+      const uF = { x: dW.x / wl, y: dW.y / wl };
+      const bieg = Math.acos(Math.max(-1, Math.min(1, uAx * uF.x + uAy * uF.y)));
+      const fg = bieg <= .35 ? 0 : Math.min(1, (bieg - .35) / .75);
+      let bx = uAx, by = uAy;
+      if (fg > 0) {
+        const bx0 = uAx + (uF.x - uAx) * fg, by0 = uAy + (uF.y - uAy) * fg;
+        const bn = Math.hypot(bx0, by0) || 1;
+        bx = bx0 / bn; by = by0 / bn;
+      }
       stift.zug([
         { x: E.x + nE.x * armW * 1.05, y: E.y + nE.y * armW * 1.05 },
-        { x: E.x + dirE.x / dl * .06, y: E.y + dirE.y / dl * .06 },
+        { x: E.x + bx * .06, y: E.y + by * .06 },
         { x: E.x - nE.x * armW * 1.05, y: E.y - nE.y * armW * 1.05 },
       ], { spur: `manschette${s}`, ...duenn });
       handFn(W.x, W.y, s, -foreArmAng * .8);

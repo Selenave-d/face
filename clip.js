@@ -152,6 +152,7 @@ let uiStift = null, uiTick = -1;
 let txMemo = { seed: -1, tx: null };          // 文案按种子记忆：不每帧重掷
 let blattMemo = null;   // 整页记忆：{ cv, key, bx, by, bw, bh }——bx/by 为该记忆区在主画布设备像素坐标里的左上角，bw/bh 为 memo 的设备像素尺寸（miss 帧从主画布 1:1 截取，存图导出按同一坐标系换算）
 let stempelOrt = null;  // 印章落点 { ax, ay, text }：miss 帧由版式函数记账（章不入底片，overlay 每帧盖）
+let titelOrt = null;    // 标题记账 { text, x, y, font, zeichen, raus, geist }：与章同思路不入底片，overlay 逐字铅字排入；宽/噪在记账时一次算定（挂 saat 不挂 tick）
 let rissMemo = { key: '', pts: null };        // 撕纸边多边形同理（只随种子与尺寸变）
 let fleckMemo = { saat: -1, list: null };     // 陈年锈斑同理（只随种子变；位置存纸面分数，resize 重投影）
 
@@ -280,11 +281,46 @@ function druckZeile(label, i) {
 
 // 通栏标题的套印重影：主遍足墨，第二遍只错 X .35~.7px（走纸方向的平移）——
 // Y 错位会读成拖影而非套印；透明度 .08~.13 在缺墨家族里补印章 .06 与黄晕 .14 之间的档
+// 通栏标题：只记账不直画——标题与章一样永不入底片，改走 overlay 逐字铅字排入（titelUeber）。
+// 套印重影只给落定的字：排入中的字拖影会读成糊（Y 错位读拖影是旧注同一道理）
 function titelDruck(text, x, y) {
-  const dr = strom(saat, 'titelDruck');
-  ctx.fillText(text, x, y);
-  ctx.globalAlpha = .08 + dr.n() * .05;
-  ctx.fillText(text, x + (dr.n() < .5 ? -1 : 1) * (.35 + dr.n() * .35), y);
+  const zeichen = [...text].map((zi) => ({ zi, w: ctx.measureText(zi).width }));   // 此刻 ctx.font 正是各版式自己的标题字号
+  titelOrt = {
+    text, x, y, font: ctx.font, zeichen,
+    raus: [...text].map((_, i) => {          // 每字固定微噪 ±1px：druckZeile 同语言，挂种子不随 8fps 沸腾跳
+      const r = strom(saat, 'titelZi' + i);
+      return { nx: r.range(-1, 1), ny: r.range(-.8, .8) };
+    }),
+    geist: [...text].map((_, i) => {          // 套印重影参数逐字独立流（原整行一对，拆到字上）
+      const r = strom(saat, 'titelGeist' + i);
+      return { dx: (r.n() < .5 ? -1 : 1) * (.35 + r.n() * .35), a: r.n() * .05 };
+    }),
+  };
+}
+// 逐字排：x 居中拆成累计左排（标题无 letterSpacing，measureText 累计与整行 center 严格等位）；
+// u_i = clamp((t-wechselZeit-.35-i*.03)/.09)——每字 30ms 开排、90ms 平方缓出落稳（相邻字重叠 60ms 连续排）
+function titelSatz(ziel, t) {
+  const o = titelOrt;
+  let x = o.x - o.zeichen.reduce((a, c) => a + c.w, 0) / 2;
+  ziel.save();
+  ziel.font = o.font;
+  ziel.textAlign = 'left';
+  ziel.textBaseline = 'middle';
+  ziel.fillStyle = '#2e2839';
+  o.zeichen.forEach((c, i) => {
+    const u = t === undefined ? 1 : Math.min(1, Math.max(0, (t - wechselZeit - .35 - i * .03) / .09));
+    if (u > 0) {
+      const { nx, ny } = o.raus[i];
+      ziel.globalAlpha = (.9 + .07 * (i % 2)) * u;   // 落定 .90/.97 交替：铅字压不匀，druckZeile 家族
+      ziel.fillText(c.zi, x + nx, o.y + ny - 3 * (1 - u) * (1 - u));   // 上方 3px 掉落 + 固定微噪
+      if (u >= 1) {                                   // 落定的字才有资格套印重影
+        ziel.globalAlpha = .08 + o.geist[i].a;
+        ziel.fillText(c.zi, x + nx + o.geist[i].dx, o.y + ny);
+      }
+    }
+    x += c.w;
+  });
+  ziel.restore();
 }
 
 function spalten(s, tx, P, Q, W, H, p, spaltenY) {
@@ -339,28 +375,28 @@ function gestrichelt(s, x, y, bw, bh, spur, pitch, anteil = .6) {
   }
 }
 
-function stempel(tx, W, ax, ay, text, k = 1) {
+function stempel(tx, W, ax, ay, text, k = 1, ziel = ctx) {   // ziel：导出补章走 out 画布（曾画到主画布——导出 PNG 里没有章）
   // 朱红印章：压在标题右端，双框 + 楷体，微微歪；k=1.18→1 是落章的「啪」手感（overlay 用）
-  ctx.save();
+  ziel.save();
   const stW = W * .14, stH = W * .1;
-  ctx.translate(ax, ay);
-  ctx.rotate(-.12);
-  ctx.scale(k, k);
-  ctx.strokeStyle = STEMPEL_ROT;
-  ctx.lineWidth = 2.2;
-  ctx.globalAlpha = .8;
-  ctx.strokeRect(-stW / 2, -stH / 2, stW, stH);
-  ctx.lineWidth = 1;
-  ctx.strokeRect(-stW / 2 + 3, -stH / 2 + 3, stW - 6, stH - 6);
-  ctx.globalAlpha = .06;   // 油墨不匀：内框再压一遍，斜错半像素的缺墨重影
-  ctx.strokeRect(-stW / 2 + 3.5, -stH / 2 + 2.5, stW - 6, stH - 6);
-  ctx.globalAlpha = .8;    // 文字照旧足墨
-  ctx.fillStyle = STEMPEL_ROT;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `${Math.round(W * .034)}px "Kaiti", "STKaiti", "楷体", serif`;
-  ctx.fillText(text || tx.stempel, 0, 1);
-  ctx.restore();
+  ziel.translate(ax, ay);
+  ziel.rotate(-.12);
+  ziel.scale(k, k);
+  ziel.strokeStyle = STEMPEL_ROT;
+  ziel.lineWidth = 2.2;
+  ziel.globalAlpha = .8;
+  ziel.strokeRect(-stW / 2, -stH / 2, stW, stH);
+  ziel.lineWidth = 1;
+  ziel.strokeRect(-stW / 2 + 3, -stH / 2 + 3, stW - 6, stH - 6);
+  ziel.globalAlpha = .06;   // 油墨不匀：内框再压一遍，斜错半像素的缺墨重影
+  ziel.strokeRect(-stW / 2 + 3.5, -stH / 2 + 2.5, stW - 6, stH - 6);
+  ziel.globalAlpha = .8;    // 文字照旧足墨
+  ziel.fillStyle = STEMPEL_ROT;
+  ziel.textAlign = 'center';
+  ziel.textBaseline = 'middle';
+  ziel.font = `${Math.round(W * .034)}px "Kaiti", "STKaiti", "楷体", serif`;
+  ziel.fillText(text || tx.stempel, 0, 1);
+  ziel.restore();
 }
 
 /* —— 版式一 · 寻人启事：居中一帧大肖像（原版式原样搬入） —— */
@@ -585,6 +621,7 @@ function rahmen(now) {
   if (!blattMemo || blattMemo.key !== key) {
     zeichneBlatt(t);   // 恒 1 倍画在主画布（不带换纸缩放）；stempel 只记账不画——底片干净
     blattMemo = erfasseBlatt(key, g);
+    titelUeber(t, g);
     stempelUeber(t, g);
     if (wE >= 1) { requestAnimationFrame(rahmen); return; }   // 稳定态：主画布已是成品，下帧起整张贴回
     papierSchnell();   // 过场：盖掉无缩放底稿，再贴缩放图
@@ -597,6 +634,7 @@ function rahmen(now) {
   ctx.translate(-mx, -my);
   ctx.drawImage(blattMemo.cv, blattMemo.bx / dpr, blattMemo.by / dpr, blattMemo.bw / dpr, blattMemo.bh / dpr);
   ctx.restore();
+  titelUeber(t, g);
   stempelUeber(t, g);
   requestAnimationFrame(rahmen);
 }
@@ -605,9 +643,20 @@ function rahmen(now) {
  * 纸先落、章后「啪」（avatar 存档章同款手感）。首载 wechselZeit=-9，u 恒 1 → 静态章，无需特判 */
 function stempelUeber(t, g) {
   if (!stempelOrt) return;
-  const u = Math.min(1, Math.max(0, (t - wechselZeit - .3) / .15));
+  // 章链到标题排完之后再「啪」：章压在标题右端同一行带（TODO 曾记「标题/印章撞车」），先排字后盖章顺带消解动画期撞车
+  const u = Math.min(1, Math.max(0, (t - wechselZeit - .35 - (titelOrt ? titelOrt.zeichen.length * .03 + .06 : 0)) / .15));
   if (u <= 0) return;
   stempel(null, g.w, stempelOrt.ax, stempelOrt.ay, stempelOrt.text, 1 + (1 - u) * .18);
+}
+
+/* 标题逐字排入 overlay：纸落定（wechselZeit+.3s）歇半拍，+.35s 起每字 30ms 依次落铅字——
+ * y 上方 3px 平方缓出 + alpha 渐入 + 每字固定微噪 ±1px。与章同模型：永不入底片，
+ * 底片照旧 8fps 沸腾，排字 60fps 直绘在 memo 之上，互不打扰（动画窗 ≠ 重烘窗）。
+ * 首载 wechselZeit=-9 → 全部 u=1 → 静态整行，无需特判 */
+function titelUeber(t, g) {
+  if (!titelOrt) return;
+  if (t < wechselZeit + .35 && t - wechselZeit < 10) return;   // 纸落定前不排（首载 t-wechselZeit 巨大，放行成静态）
+  titelSatz(ctx, t);
 }
 
 function resize() {
@@ -652,7 +701,13 @@ document.getElementById('speicher').addEventListener('click', () => {
   // 补章：章不入底片，导出在 out 画布上以 CSS 坐标系补画一次静态章（输出 = 源 × 2/dpr，换算回 memo 基准）
   if (stempelOrt) {
     oc.setTransform(2 / dpr, 0, 0, 2 / dpr, -m.bx * 2 / dpr, -m.by * 2 / dpr);
-    stempel(null, g.w, stempelOrt.ax, stempelOrt.ay, stempelOrt.text, 1);
+    stempel(null, g.w, stempelOrt.ax, stempelOrt.ay, stempelOrt.text, 1, oc);
+    oc.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  // 补标题：标题同章不入底片，导出在 out 上以 CSS 坐标系补画一次落定整行
+  if (titelOrt) {
+    oc.setTransform(2 / dpr, 0, 0, 2 / dpr, -m.bx * 2 / dpr, -m.by * 2 / dpr);
+    titelSatz(oc);
     oc.setTransform(1, 0, 0, 1, 0, 0);
   }
   out.toBlob((blob) => {
