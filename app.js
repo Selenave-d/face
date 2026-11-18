@@ -1443,9 +1443,12 @@ function machHaaransatz(dna, opt = {}) {
     return fallStufe * .5 * t * t * (3 - 2 * t);
   };
   const neigung = opt.neigung ?? 0;
+  // 发际收半距：ansatzV 与 braueV 独立掷点，两人同眉位发际可差 .32v（≈颅高 15%，clip 胸像 ~30px）忽高忽低；
+  // 只削「超出眉上地板 .38」的那一半（.38 = 地板 .28 + 中心形状项 -.1），低额原值透传——高额档收进 [braueV+.28, +.44]
+  const ansatzMitte = dna.ansatzV + tiefe - Math.max(0, dna.ansatzV + tiefe - braueV - .38) * .5;
   const bogen = (u) => Math.max(
     braueV + .28 - schlafe(u),
-    dna.ansatzV + tiefe + Math.cos(u) * -.1 + Math.sin(u * 2) * .025 + neigung * u - schlafe(u)
+    ansatzMitte + Math.cos(u) * -.1 + Math.sin(u * 2) * .025 + neigung * u - schlafe(u)
   );
   if (opt.welle) {
     return (u) => Math.max(klemme(u), bogen(u) - .05 - .05 * Math.sin(u * 5.2 + dna.seed));
@@ -2296,7 +2299,8 @@ function drawNeck(stift, dna, ctx3d, umriss, kragen, pal, schulterStueck = false
       { spur: 'kragen', w: .022, wackel: .004, farbe: pal.tinte });
   } else if (kragen === 'schal') {
     // 围巾：颈根一道宽绕弧 + 垂在肩前的一小头，尾端三笔流苏
-    // （垂头守在肩块下缘 ~.2l 之内：胸像模式没有身体接在下面，伸出去就是悬空）
+    // （垂头守在肩块下缘 ~.2l 之内：胸像模式没有身体接在下面，伸出去就是悬空。
+    //  流苏底 .21l 虽过角线 .2l 达 .01l，但流苏 x≤mx+.12 落在肩块中央凹坡段，该处剪影底 y1+.036~.05——实际不出界）
     // 横向常量挂 halb 归一：原绝对值 .1/.045 让窄脸围巾膨胀到颈宽 2.7 倍宽松垮、宽脸 2.2 倍贴脖——中位脸=1 两端同调
     const sS = halb / .078;
     stift.zug([{ x: a.x - .1 * sS, y: a.y - .03 }, { x: mx, y: untenY + l * .13 }, { x: b.x + .1 * sS, y: b.y - .03 }],

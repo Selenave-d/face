@@ -152,6 +152,8 @@ let uiStift = null, uiTick = -1;
 let txMemo = { seed: -1, tx: null };          // 文案按种子记忆：不每帧重掷
 let blattMemo = null;   // 整页记忆：{ cv, key, bx, by, bw, bh }——bx/by 为该记忆区在主画布设备像素坐标里的左上角，bw/bh 为 memo 的设备像素尺寸（miss 帧从主画布 1:1 截取，存图导出按同一坐标系换算）
 let stempelOrt = null;  // 印章落点 { ax, ay, text }：miss 帧由版式函数记账（章不入底片，overlay 每帧盖）
+let altMemo = null;    // 换报旧纸快照 { cv, bx, by, bw, bh, dpr }：必须深拷贝到独立 canvas——erfasseBlatt 复用
+                       // blattMemo.cv 原地重画，存引用的话下一帧 miss 旧画面即被新纸冲掉；dpr 一并记下，换算不随 resize 漂
 let titelOrt = null;    // 标题记账 { text, x, y, font, zeichen, raus, geist }：与章同思路不入底片，overlay 逐字铅字排入；宽/噪在记账时一次算定（挂 saat 不挂 tick）
 let rissMemo = { key: '', pts: null };        // 撕纸边多边形同理（只随种子与尺寸变）
 let fleckMemo = { saat: -1, list: null };     // 陈年锈斑同理（只随种子变；位置存纸面分数，resize 重投影）
@@ -626,6 +628,26 @@ function rahmen(now) {
     if (wE >= 1) { requestAnimationFrame(rahmen); return; }   // 稳定态：主画布已是成品，下帧起整张贴回
     papierSchnell();   // 过场：盖掉无缩放底稿，再贴缩放图
   }
+  /* 旧纸斜滑出：换报 0~0.3s 间，把 altMemo 快照往左下斜移 + 顺时针微旋 + 淡出，画在下方 wk 段
+   * 新纸缩放图之下。幅度要够大（.22w）：记忆垫边 17px + 新纸过冲盖 ~13px——位移小了露出来的
+   * 恒是空白纸边、深色纸缘永远藏在不透明新纸底下（首轮 .085w 实测不可见）；.22w 中段即露出
+   * 带字迹的真纸身，被整张抽走。首载 altMemo 为 null 天然不触发；窗过即丢快照 */
+  if (altMemo) {
+    // 早于起点的帧直接跳过不清快照：点击后首帧的 rAF 时间戳可能仍属点击前（vsync 先于任务），
+    // 若把它当「窗已过」清掉 altMemo，滑出永远不画（实测竞态：手动绘制可见、rahmen 恒不可见的元凶）
+    if (t >= wechselZeit && t - wechselZeit < .3) {
+      const a = altMemo, u = (t - wechselZeit) / .3;
+      ctx.save();
+      ctx.globalAlpha = 1 - u;
+      ctx.translate(g.x + g.w / 2 - g.w * .22 * u, g.y + g.h / 2 + g.w * .14 * u);
+      ctx.rotate(.1 * u);   // ≈5.7° 顺时针：纸被抽走的自然旋向
+      ctx.translate(-g.x - g.w / 2, -g.y - g.h / 2);
+      ctx.drawImage(a.cv, a.bx / a.dpr, a.by / a.dpr, a.bw / a.dpr, a.bh / a.dpr);
+      ctx.restore();
+    } else if (t > wechselZeit + .3) {
+      altMemo = null;   // 窗真正结束才丢快照（连点会重灌，见点击处理）；t<wechselZeit 的早帧保留
+    }
+  }
   const wk = .94 + .06 * wE + .05 * Math.sin(Math.PI * wE);   // wE=0→.94，中途≈1.02 过冲，wE=1→恰 1
   const mx = g.x + g.w / 2, my = g.y + g.h / 2;   // 锚纸中心：整张纸一起落，页底纸纹不动
   ctx.save();
@@ -665,6 +687,7 @@ function resize() {
   canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width = innerWidth + 'px';
   canvas.style.height = innerHeight + 'px';
+  altMemo = null;   // 滑出窗内 resize：中止旧纸过场（geo 全重排后旧纸位置已无意义）
 }
 addEventListener('resize', resize);
 // GPU 上下文恢复后整页记忆底片被清空——置空让下一帧 miss 重烘（app.js 层已清 papier/grain/heads）
@@ -673,6 +696,15 @@ resize();
 requestAnimationFrame(rahmen);
 
 document.getElementById('neues').addEventListener('click', () => {
+  // 旧纸斜滑出：把屏幕上正显示的纸（恒为 blattMemo.cv——稳定态整张贴它、过场贴它的缩放图）深拷贝成独立快照；
+  // 连点时拷到的也是「此刻显示的那张」，语义自洽
+  if (blattMemo && blattMemo.cv) {
+    const a = { cv: document.createElement('canvas'), bx: blattMemo.bx, by: blattMemo.by,
+      bw: blattMemo.bw, bh: blattMemo.bh, dpr };
+    a.cv.width = a.bw; a.cv.height = a.bh;
+    a.cv.getContext('2d').drawImage(blattMemo.cv, 0, 0);
+    altMemo = a;
+  }
   kopf = neuesKopf((Math.random() * 1e9) | 0);
   kopf2 = zweitKopf(saat + 1013);   // 头版第二张脸跟着换，别让脸和文案对不上
   wechselZeit = performance.now() / 1000;   // 新纸落定的起点（与 rAF 时间戳同源）
@@ -700,13 +732,13 @@ document.getElementById('speicher').addEventListener('click', () => {
   oc.drawImage(m.cv, sx, sy, sw, sh, 0, 0, out.width, out.height);
   // 补章：章不入底片，导出在 out 画布上以 CSS 坐标系补画一次静态章（输出 = 源 × 2/dpr，换算回 memo 基准）
   if (stempelOrt) {
-    oc.setTransform(2 / dpr, 0, 0, 2 / dpr, -m.bx * 2 / dpr, -m.by * 2 / dpr);
+    oc.setTransform(2, 0, 0, 2, -(m.bx + sx) * 2 / dpr, -(m.by + sy) * 2 / dpr);   // out=CSS裁区×2：a=2 且平移含源区偏移 sx/sy（旧式 2/dpr 只在 dpr=1 碰对，高 dpr 屏半缩错位）
     stempel(null, g.w, stempelOrt.ax, stempelOrt.ay, stempelOrt.text, 1, oc);
     oc.setTransform(1, 0, 0, 1, 0, 0);
   }
   // 补标题：标题同章不入底片，导出在 out 上以 CSS 坐标系补画一次落定整行
   if (titelOrt) {
-    oc.setTransform(2 / dpr, 0, 0, 2 / dpr, -m.bx * 2 / dpr, -m.by * 2 / dpr);
+    oc.setTransform(2, 0, 0, 2, -(m.bx + sx) * 2 / dpr, -(m.by + sy) * 2 / dpr);   // out=CSS裁区×2：a=2 且平移含源区偏移 sx/sy（旧式 2/dpr 只在 dpr=1 碰对，高 dpr 屏半缩错位）
     titelSatz(oc);
     oc.setTransform(1, 0, 0, 1, 0, 0);
   }
