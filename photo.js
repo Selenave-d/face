@@ -341,6 +341,7 @@ canvas.addEventListener('pointerdown', (e) => {
     if (phase !== 'idle') return;
     klickSperre = true;
     kind.laune = null;                     // 手动表情优先，压过自动小情绪
+    kind.angestarrtSeit = 0; kind.schuechternVon = 0; kind.schuechternBis = 0;   // 换脸也清害羞（别等余韵）
     const i = FOLGE.indexOf(kind.face);
     kind.face = FOLGE[(i >= 0 ? i + 1 : 1) % FOLGE.length];
     kind.hopT = performance.now() / 1000;  // 换表情小跳一下：输入要有即时可见反馈
@@ -1170,6 +1171,8 @@ function rahmen(now) {
   // 后排先画（前排压住后排的脚，深度自然）
   const geordnet = [...kinder].sort((a, b) => (a.g.hinten ? 0 : 1) - (b.g.hinten ? 0 : 1));
   const qt = Math.floor(t * 12) / 12;
+  // 被盯的是谁：每帧独立算（hoverKind 是事件驱动，指针静止恰恰是注视场景时它不刷新，不能复用）
+  const sternKind = (pointer.active && phase === 'idle') ? kindBei(pointer.x, pointer.y) : null;
   for (const kind of geordnet) {
     // 眨眼计时（12fps 量化）；睡着的眼本是闭弧、blink 算了也被 face 短路——不排钟，醒来那拍多半立即补一眨（刚醒眨眨眼）
     if (qt > kind.naeBlink && kind.face !== 'schlaeft') {
@@ -1187,6 +1190,7 @@ function rahmen(now) {
       }
     } else if (phase === 'idle' && kind.zustand === 'da' && kind.face === 'ruhig'
       && t - kind.tippVon > 2.2   // 垫脚表演中不塞情绪（姿态彩蛋与情绪互斥）
+      && !kind.schuechternVon && t >= kind.schuechternBis   // 害羞躲视线期间也不塞（躲一半突然自己哭起来就出戏了）
       && !gewaehlt.has(kinder.indexOf(kind)) && t > kind.naechsteLaune) {
       const r = kind.launeWuerfel();
       kind.laune = r < .38 ? 'froh' : r < .6 ? 'boese' : r < .78 ? 'schlaeft' : 'weint';
@@ -1206,6 +1210,20 @@ function rahmen(now) {
       ? (tippDt < .3 ? smooth(tippDt / .3)
         : tippDt > 1.6 ? smooth((1.9 - tippDt) / .3) : 1)
       : 0;
+    // 害羞判定：指针停在命中域（与点选/悬停同椭圆）连续 >2s 才算「被注视」；扫过/离开即清零重计；
+    // face!=='ruhig'（被选中/长按换脸/小情绪）不触发——tipp 同款守卫（ruhig 配方眼型才有瞳点，躲视线才看得见）
+    const angesehen = sternKind === kind && kind.zustand === 'da' && kind.face === 'ruhig'
+      && !gewaehlt.has(kinder.indexOf(kind));
+    if (angesehen) {
+      if (!kind.angestarrtSeit) kind.angestarrtSeit = t;
+      else if (t - kind.angestarrtSeit > 2 && !kind.schuechternVon) {
+        kind.schuechternVon = t;              // 触发：往复躲/瞄的相位零点
+        kind.hopT = t; kind.hopAmp = -.07;    // 小瑟缩一下（waehle 满员「往下一蹲」-.12 的轻量版）
+      }
+    } else {
+      kind.angestarrtSeit = 0;                // <2s 离开=白盯，重新累计
+      if (kind.schuechternVon) { kind.schuechternVon = 0; kind.schuechternBis = t + .3; }   // 离开：0.3s 余韵
+    }
     // 视线：指针凑近就盯着指针看，否则各自慢慢东张西望
     let zx, zy;
     if (pointer.active && kind.zustand === 'da'
@@ -1218,7 +1236,18 @@ function rahmen(now) {
       zy = Math.sin(w * .8 + 2.2) * .4;
     }
     if (t < kind.kameraBis) { zx = 0; zy = 0; }   // 看镜头：视线目标归正，gleit 自带平滑转向
-    else if (tipp > 0) { zx = 0; zy = 0; }        // 垫脚偷看：表演期间视线也归正（kamera > tipp > 指针 > 游走）
+    else if (tipp > 0) { zx = 0; zy = 0; }        // 垫脚偷看：表演期间视线也归正（kamera > tipp > 害羞 > 指针 > 游走）
+    else if (kind.schuechternVon || t < kind.schuechternBis) {
+      // 害羞躲视线：1.6s 一轮——躲 1.2s + 偷瞄 0.4s（回看一眼发现还在被盯，慌忙移开）；
+      // 余韵期（无相位零点）只躲不瞄；gleit 把方波边沿柔成瞟动
+      if (kind.schuechternVon && (t - kind.schuechternVon) % 1.6 >= 1.2) {
+        zx = clamp((pointer.x - kind.x) / (kind.k * 2.4), -1, 1);   // 偷瞄：回看指针（与跟随同式）
+        zy = clamp((pointer.y - (kind.footY - kind.k)) / (kind.k * 2.4), -1, 1);
+      } else {
+        zx = -Math.sign(pointer.x - kind.x || 1) * .7;              // 躲：背向指针瞟开（正上方躲右）
+        zy = .3;                                                     // 略垂眼更怯
+      }
+    }
     const gleit = 1 - Math.exp(-dt * 8);
     kind.bx += (zx - kind.bx) * gleit;
     kind.by += (zy - kind.by) * gleit;
@@ -1254,7 +1283,10 @@ function resize() {
   canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width = innerWidth + 'px';
   canvas.style.height = innerHeight + 'px';
-  for (const kind of kinder) platzieren(kind);
+  for (const kind of kinder) {
+    if (kind.zustand === 'kommen') kind.ox0 = (kind.platz % KINDER_PRO_REIHE < 2.5 ? -1 : 1) * innerWidth * .3;   // 入场半途缩窗：起点按新窗宽重算，别从旧坐标凭空走入
+    platzieren(kind);
+  }
 }
 addEventListener('resize', resize);
 resize();

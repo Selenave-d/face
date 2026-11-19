@@ -651,6 +651,7 @@ function resize() {
   canvas.style.height = innerHeight + 'px';
   platzeLegen();
   klatsch = null;   // 重排会打乱站位下标（跨档缩编还会截断 leute）——击掌状态作废，星光层另有下标空值双保险
+  raketen.length = 0;   // 绝对像素残弹随 resize 作废，≤.72s 后新批按新窗坐标补上（庆祝结束清残弹同语义）
 }
 addEventListener('resize', resize);
 // GPU 上下文恢复后精灵底片被清空——置空让下一帧 miss 重烘（app.js 层已清 papier/grain/heads）

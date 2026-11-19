@@ -93,7 +93,8 @@ function texte(seed) {
   const r = strom(seed, 'text');
   const name = chinesischerName(strom(seed, 'name'));
   // 头版字段全部走独立 label 流且追加在末尾：不动上面 'text' 流的消费顺序，同种子寻人版文案一字不变
-  const name2 = chinesischerName(strom(seed, 'name2'));
+  let name2 = chinesischerName(strom(seed, 'name2'));
+  if (name2 === name) name2 = chinesischerName(strom(seed, 'name2x'));   // 撞名换独立流重掷（~1/2200 种子）——「张伟找到了张伟」就算了
   return {
     blatt: r.pick(BLATT_NAME),
     datum: `19${40 + Math.floor(r.n() * 59)} 年 ${1 + Math.floor(r.n() * 12)} 月 ${1 + Math.floor(r.n() * 28)} 日`,
@@ -691,7 +692,7 @@ function resize() {
 }
 addEventListener('resize', resize);
 // GPU 上下文恢复后整页记忆底片被清空——置空让下一帧 miss 重烘（app.js 层已清 papier/grain/heads）
-canvas.addEventListener('contextrestored', () => { blattMemo = null; });
+canvas.addEventListener('contextrestored', () => { blattMemo = null; altMemo = null; });   // altMemo 同清：context 丢失后旧快照也是陈纸
 resize();
 requestAnimationFrame(rahmen);
 
