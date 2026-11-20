@@ -73,7 +73,8 @@ const REQUISITEN = {
       if (p.art === 'cat') {
         for (const sd of [-1, 1]) st.line([[x + sd * s * .08, y - s * .27], [x + sd * s * .14, y - s * .4], [x + sd * s * .19, y - s * .26]], 1.3, { closed: true, label: 2 + sd });
       } else if (p.art === 'dog') {
-        for (const sd of [-1, 1]) st.line(bogenPts(x + sd * s * .19, y - s * .05, s * .08, s * .16, sd > 0 ? -.8 : Math.PI + -.8, sd > 0 ? .8 : Math.PI + .8, 6), 1.3, { label: 4 + sd });
+        // 耳弧两端要落回头缘：原 ±.19s/±.8rad 时弧内缘 |x|≈.246s vs 头侧缘 .19-.20s，缝 ~.05s 读作脱落的括号——内收 + 放宽扫角补上
+        for (const sd of [-1, 1]) st.line(bogenPts(x + sd * s * .155, y - s * .05, s * .08, s * .16, sd > 0 ? -1.05 : Math.PI + -1.05, sd > 0 ? 1.05 : Math.PI + 1.05, 6), 1.3, { label: 4 + sd });
       } else if (p.art === 'rabbit') {
         for (const sd of [-1, 1]) st.line(bogenPts(x + sd * s * .08, y - s * .42, s * .05, s * .16, Math.PI * .9, Math.PI * 2.1, 6), 1.3, { label: 6 + sd });
       } else {
@@ -1216,7 +1217,7 @@ function rahmen(now) {
       && !gewaehlt.has(kinder.indexOf(kind));
     if (angesehen) {
       if (!kind.angestarrtSeit) kind.angestarrtSeit = t;
-      else if (t - kind.angestarrtSeit > 2 && !kind.schuechternVon) {
+      else if (t - kind.angestarrtSeit > 2 && !kind.schuechternVon && t - kind.tippVon > 2.2) {   // 垫脚表演中不触发（laune 同款守卫）——触发会拿 hop 叠加蹲势在踮脚上，包络糊
         kind.schuechternVon = t;              // 触发：往复躲/瞄的相位零点
         kind.hopT = t; kind.hopAmp = -.07;    // 小瑟缩一下（waehle 满员「往下一蹲」-.12 的轻量版）
       }

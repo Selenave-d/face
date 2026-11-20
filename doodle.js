@@ -496,6 +496,17 @@ function zeichneBrauen(stift, rec, k, face) {
   }
 }
 
+/* 睡眠呼吸相位：schlaeft 时幅度×2.2（.8s 缓入）、周期×1.8（小孩酣睡起伏明显）。
+ * 入睡帧把相位锚在醒着的连续论证上 → 变速不跳相位；锚点挂 rec.anim（drawDoodle 设/清，
+ * 贴纸 flach 由调用方守卫——photo.js:1025 贴纸复用孩子的同一 rec，别让双调用互删锚点） */
+function schlafBobArg(rec, qt) {
+  if (rec.anim.schlafQt === undefined) return null;
+  return {
+    w: rec.anim.schlafW + (qt - rec.anim.schlafQt) * 2.2 * rec.anim.tempo / 1.8,
+    amp: 1 + 1.2 * Math.min(1, (qt - rec.anim.schlafQt) / .8),
+  };
+}
+
 /* 睡觉的 Zzz：头顶右上方飘两个 z，按相位若隐若现 */
 function zeichneZzz(stift, rec, k, qt) {
   const auf = (qt * .5 + rec.anim.phase) % 3;   // 3 秒一轮，前 2 秒可见
@@ -508,8 +519,11 @@ function zeichneZzz(stift, rec, k, qt) {
     stift.line([[x, y], [x + g, y], [x, y + g * .9], [x + g, y + g * .9]], 1.2, { label, alpha });
   };
   // 起点外移到耳/角区外（熊耳 x≤.84RX、魇角尖≤.89RX）：原 R*.7 落在熊右耳内、擦魇角上段
-  z(AX * 1.12, -1.5 * k, .09 * k, 210, .5 * fade);
-  z(AX * 1.38, -1.66 * k, .12 * k, 211, .7 * fade);
+  // z 跟呼吸微沉浮：比身体晚约 .55s 错相 ×.012k——z 本已随身体 bob 起伏（translate 内），这是叠加的相对差动
+  const sba = schlafBobArg(rec, qt);
+  const treib = sba ? Math.sin(sba.w - 1.1 * 2.2 * rec.anim.tempo / 1.8) * .012 * k : 0;
+  z(AX * 1.12, -1.5 * k + treib, .09 * k, 210, .5 * fade);
+  z(AX * 1.38, -1.66 * k + treib * 1.15, .12 * k, 211, .7 * fade);   // 远的那枚飘多一点
 }
 
 function zeichneAugen(stift, rec, k, blink, face = 'ruhig', blick = null) {
@@ -1072,7 +1086,11 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig', qt = 0) {
     // 胡须从颊上向外伸：起点按吻瓣实际半宽外推，宽吻的狗不会从吻里长出胡须
     const my = cy + .28 * k;
     const schnauzeRx = rec.skull.muzzle * k * .5 * (rec.skull.fett ?? 1);
-    const x0 = Math.max(R * .55, schnauzeRx + .06 * k);
+    let x0 = Math.max(R * .55, schnauzeRx + .06 * k);
+    // 狗垂耳×胡须撞位：垂耳瓣（zeichneCrest floppy：外沿≈R*(.62wf+.30)+半宽 .11~.14R）盖过胡须带 y∈[-.74,-.60]k，
+    // 短吻长耳档三根胡须 55-58% 横贯耳瓣读作「从耳朵里长出胡须」——floppy（仅狗 cast）把根外推到耳瓣外沿外；
+    // 调 floppy 几何时此式要跟着动（两处几何互相锚定）。猫/兔/熊不受影响
+    if (rec.crest.style === 'floppy') x0 = Math.max(x0, R * (rec.skull.wf * .62 + .44));
     const kipp = face === 'froh' ? -.015 * k : face === 'boese' ? .015 * k : 0;   // 胡须倾角挂表情：喜上挑/怒下压/其余平（y 向下为正）
     for (const s of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
@@ -1135,11 +1153,21 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
   const qt = Math.floor(t * 12) / 12;
   const stift = bleiStift(ctx, _h2(rec.seed, tick), rec.media, rec.farbe);
   stift.flach(!!anim.flach);   // 微型尺寸（贴纸照片）走扁平上色，排线不糊不费
-  const bob = Math.sin(qt * 2.2 * rec.anim.tempo + rec.anim.phase) * .018 * k;
+  // 表情：平静（配方原样）/ 笑 / 怒 / 怕 / 哭 / 睡 —— 眼嘴换画法、怒怕加眉（上移：bob 要按睡态调制）
+  const face = anim.face ?? 'ruhig';
+  // 睡觉呼吸弧：入睡帧锚定相位（变速不跳变）、幅度 .8s 缓入；醒来清锚回原式（≤3px 落回被同帧换脸盖住）
+  const wachW = qt * 2.2 * rec.anim.tempo + rec.anim.phase;
+  let bobW = wachW, bobAmp = 1;
+  if (face === 'schlaeft' && !anim.flach) {
+    if (rec.anim.schlafQt === undefined) { rec.anim.schlafQt = qt; rec.anim.schlafW = wachW; }
+    const sba = schlafBobArg(rec, qt);
+    bobW = sba.w; bobAmp = sba.amp;
+  } else if (!anim.flach && rec.anim.schlafQt !== undefined) {
+    delete rec.anim.schlafQt; delete rec.anim.schlafW;
+  }
+  const bob = Math.sin(bobW) * .018 * bobAmp * k;
   const wag = Math.sin(qt * 5 + rec.anim.phase);
   const kopf = kopfPoly(rec, k);
-  // 表情：平静（配方原样）/ 笑 / 怒 / 怕 / 哭 / 睡 —— 眼嘴换画法、怒怕加眉
-  const face = anim.face ?? 'ruhig';
 
   ctx.save();
   ctx.translate(X, footY);

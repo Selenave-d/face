@@ -584,6 +584,14 @@ const GESICHT_FORMEN = {
   staune: { auge: 'weit', mund: 'offen', braue: 'hoch' },   // 惊：瞪眼缩瞳 + 小张嘴 + 高挑眉——三件都是现成变体的组合，零新绘制
 };
 const GESICHT_FOLGE = ['', 'froh', 'boese', 'traurig', 'muede', 'staune'];   // 循环顺序：日常→笑→怒→难过→困→惊
+// 表情呼吸律：情绪改呼吸的节律与幅度（周期乘数→速率÷之；实感参考：放松 15-20 次/分、酣睡更慢更深）
+const ATEM_MASS = {
+  froh: { periode: 1.1, amp: 1.1 },    // 轻快
+  boese: { periode: .8, amp: 1.25 },   // 粗重急促
+  traurig: { periode: 1.2, amp: .7 },  // 浅而滞
+  muede: { periode: 1.6, amp: 1.3 },   // 酣睡：慢而深
+  staune: { periode: 1, amp: .1 },     // 屏息：几乎停摆（lerp 自然给出「松一口气」的回弹）
+};
 const KRAGEN_W = [['keiner', 1.5], ['v', 2], ['rund', 2], ['schal', .7]];
 const ZEICHEN_W = [['keine', 6], ['augenringe', 1], ['schraffur', 1], ['stirnfalten', 1], ['wangenbogen', 1.4], ['muttermal', 1]];
 const ZIERRAT_W = [['keiner', 7], ['ohrring', 1.2], ['pflaster', .8]];
@@ -754,6 +762,9 @@ class Head {
     this.steif = 7 + r() * 9;
     this.atemPhase = r() * 6.28;
     this.atemTempo = .5 + r() * .3;
+    // 表情呼吸律：系数经 τ600ms 低通往目标缓入缓出；三条相位改累积式（变速不跳相位），null=尚未起振
+    this.atemPeriodeMul = 1; this.atemAmpMul = 1;
+    this.atemW = null; this.atemW2 = null; this.standW = null;
     this.plappertBis = 0;
     this.naechstesPlappern = t0 + 3 + r() * 14;
     this.plapperTempo = 7 + r() * 4;
@@ -788,6 +799,9 @@ class Head {
   motionPose(t) {
     const qt = Math.floor((t - this.akSeit) * 12) / 12;
     let p = AKTIONEN[this.akName].pose(qt, this.dna);
+    // 表情呼吸律：stand 的 dy 是纯呼吸正弦，改由累积相位驱动（变速不跳相位、幅度随 ampMul）；
+    // 放 akVon 插值之前让 0.25s 动作过渡顺带把新节律平滑进去。只覆写 stand（jump/walk 的 dy 是动作位移，绝不能动）
+    if (this.akName === 'stand' && this.standW != null) p.dy = .012 * this.atemAmpMul * Math.sin(this.standW + 1);
     if (this.akVon) {
       const f = smooth((t - this.akSeit) / .25);
       if (f >= 1) this.akVon = null;
@@ -798,6 +812,17 @@ class Head {
 
   update(dt, t, pointer) {
     dt = clamp(dt, 0, .05);
+    // —— 表情呼吸律：读当前表情（GESICHT_FORMEN 引用恒等反查，crowd/clip 无 gesicht 天然系数 1）→
+    // 目标系数低通缓入缓出；三条呼吸相位改累积式（w += dt*速率/周期乘数）——变速不跳相位，首帧按旧式对齐无缝 ——
+    const gKey = this.gesicht ? GESICHT_FOLGE.find((g) => g && GESICHT_FORMEN[g] === this.gesicht) : null;
+    const ziel = (gKey && ATEM_MASS[gKey]) || { periode: 1, amp: 1 };
+    const gA = 1 - Math.exp(-dt / .6);   // τ=600ms：换表情/回神呼吸不跳变（帽惯性同款 dt 式增益）
+    this.atemPeriodeMul += (ziel.periode - this.atemPeriodeMul) * gA;
+    this.atemAmpMul += (ziel.amp - this.atemAmpMul) * gA;
+    if (this.atemW === null) { this.atemW = t * .24 + this.atemPhase; this.atemW2 = t * this.atemTempo + this.atemPhase; this.standW = t * 2.2; }
+    this.atemW += dt * .24 / this.atemPeriodeMul;
+    this.atemW2 += dt * this.atemTempo / this.atemPeriodeMul;
+    this.standW += dt * 2.2 / this.atemPeriodeMul;
     let zYaw = 0, zPitch = 0, zBlickX = 0, zBlickY = 0, zWach = 0;
     if (pointer.active) {
       const reich = 7 * this.mass;
@@ -808,10 +833,10 @@ class Head {
       zBlickY = clamp(ey * 2.1, -1, 1);
       zWach = smooth((Math.hypot(pointer.x - this.cx, pointer.y - this.cy) / this.mass - 3.4) / (1.6 - 3.4));
     } else {
-      const w = t * .24 + this.atemPhase;
-      zYaw = Math.sin(w) * .4 * .35;
-      zPitch = Math.sin(w * .61 + 1.7) * .4 * .16;
-      zBlickX = Math.sin(w * 1.13) * .5;
+      const w = this.atemW;   // 累积相位：情绪变速不跳相位
+      zYaw = Math.sin(w) * .4 * .35 * this.atemAmpMul;
+      zPitch = Math.sin(w * .61 + 1.7) * .4 * .16 * this.atemAmpMul;
+      zBlickX = Math.sin(w * 1.13) * .5;   // 视线行程不随情绪缩放（情绪改的是躯干/头，不是眼球）
       zBlickY = Math.sin(w * .77 + 2.2) * .3;
     }
     // 临界阻尼弹簧：头慢慢甩过去
@@ -860,7 +885,7 @@ class Head {
 
   // 当前动画帧的全部状态
   zustand(t) {
-    const atem = Math.sin(t * this.atemTempo + this.atemPhase);
+    const atem = Math.sin(this.atemW2 ?? (t * this.atemTempo + this.atemPhase)) * (this.atemAmpMul ?? 1);   // ?? 兜底：update 之前的任何直调边角
     let lider = 0;
   if (t < this.blinzeltBis) lider = Math.sin((1 - (this.blinzeltBis - t) / .14) * Math.PI);
     return {
@@ -2984,7 +3009,7 @@ function drawHead(ctx, head, t) {
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
   ctx.restore();
   // 2.5 身体：骨架链 + 动作姿态（一墙脸/剪报/头像的胸像不画身体）
-  if (!WAND && !CLIP && !AVATAR) drawBody(stift, dna, pal, hals, Math.sin(t * head.atemTempo + head.atemPhase), koerperPose);
+  if (!WAND && !CLIP && !AVATAR) drawBody(stift, dna, pal, hals, Math.sin(head.atemW2 ?? (t * head.atemTempo + head.atemPhase)) * (head.atemAmpMul ?? 1), koerperPose);
   // 3. 耳朵（朝向我们的那只后画）
   const ohrL = feldAn(-1.48, dna.layout.ohrV, ctx3d);
   const ohrR = feldAn(1.48, dna.layout.ohrV, ctx3d);
