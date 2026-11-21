@@ -413,8 +413,8 @@ function kleinTick(t) {
  * niesKontakt 是代际标记：传染出的喷嚏不再传染，连锁一代即止（均值 .35 的分支过程本会自然熄灭，
  * 代际标记额外挡掉 A→B→A 往返的观感瑕疵） */
 const niesAnsteck = [];
-function niesAnsteckung(i, t) {
-  if (leute[i].niesKontakt) return;
+// 同排横向最近的站定邻居（同 reihe、站稳 sicht-rang≥1、akName==='stand'、!akVon）——喷嚏传染与鞠躬回礼共用
+function naechsterStandNachbar(i) {
   const p = plaetze[i], sicht = sichtbarAus(wert);
   let best = -1, bestDx = 1e9;
   for (let j = 0; j < plaetze.length; j++) {
@@ -426,6 +426,11 @@ function niesAnsteckung(i, t) {
     const dx = Math.abs(q.x - p.x);
     if (dx < bestDx) { bestDx = dx; best = j; }
   }
+  return best;
+}
+function niesAnsteckung(i, t) {
+  if (leute[i].niesKontakt) return;
+  const best = naechsterStandNachbar(i);
   if (best < 0 || Math.random() >= .35) return;
   niesAnsteck.push({ h: leute[best], bei: t + .6 + Math.random() * .5 });
 }
@@ -441,6 +446,32 @@ function niesAnsteckTick(t) {
     if (clamp(sichtbarAus(wert) - plaetze[i].rang, 0, 1) < 1) continue;
     e.h.niesKontakt = true;
     e.h.setAktion('sneeze', t, AKTIONEN.sneeze.periode);
+  }
+}
+
+/* 鞠躬回礼：有人躬到最深那一下（起手 .57s，hold 段起点），同排横向最近的站定邻居 0.6-1.0s 后也回一躬
+ * （礼尚往来，必回不掷概率——躬身无人回应反而读作失礼）。队列照 niesAnsteck 语义（Head 引用+绝对时刻、
+ * 到点即删、feier 清残弹、fire 前重验、indexOf=-1 兜 resize）。gruesAb 是回礼代际标记：回礼者打出的 bow
+ * 不再触发回礼——一往一返即止，不会沿一排无限链式对躬（kleinTick 4-9s 一掷且仅 ≤5 人，无需每波限量） */
+const bowErwiderung = [];
+function bowErwidern(i, t) {
+  if (leute[i].gruesAb) return;   // 回礼的 bow 不再回礼（niesKontakt 同款守卫位）
+  const best = naechsterStandNachbar(i);
+  if (best < 0) return;
+  bowErwiderung.push({ h: leute[best], bei: t + .6 + Math.random() * .4 });
+}
+function bowErwiderungTick(t) {
+  for (let k = bowErwiderung.length - 1; k >= 0; k--) {
+    const e = bowErwiderung[k];
+    if (t < e.bei) continue;
+    bowErwiderung.splice(k, 1);
+    if (feier) continue;                                // 满编庆祝接管：清残弹
+    const i = leute.indexOf(e.h);
+    if (i < 0) continue;                                // 跨档缩编把人收走了
+    if (e.h.akName !== 'stand' || e.h.akVon) continue;  // 0.6-1.0s 里可能已被逗弄/掷中，开火前再验
+    if (clamp(sichtbarAus(wert) - plaetze[i].rang, 0, 1) < 1) continue;
+    e.h.gruesAb = true;
+    e.h.setAktion('bow', t, AKTIONEN.bow.periode * .8);   // 回礼短一拍（礼数：回躬更浅更短）：1.2s 掐在起身段，经 akVon 插值利落收直
   }
 }
 
@@ -537,6 +568,7 @@ function rahmen(now) {
   feierTick(t);
   kleinTick(t);
   niesAnsteckTick(t);
+  bowErwiderungTick(t);
 
   // 地面线：比最前排的脚再低几像素，画在人群后面，身体自然盖住脚后的线
   const bt = Math.floor(t * 8);
@@ -560,16 +592,23 @@ function rahmen(now) {
     if (h.akName === 'sneeze') {
       if (!h.niesBl && t - h.akSeit > .63) { h.niesBl = true; h.blinzeltBis = t + .14; niesAnsteckung(i, t); }
     } else { h.niesBl = false; h.niesKontakt = false; }   // 离开 sneeze 即清「传染代」标记
+    // 鞠躬回礼：躬到最深（起手 .57s，hold 段起点）那一下，请同排最近站定邻居稍后回一躬
+    if (h.akName === 'bow') {
+      if (!h.bowBl && t - h.akSeit > .57) { h.bowBl = true; bowErwidern(i, t); }
+    } else { h.bowBl = false; h.gruesAb = false; }   // 离开 bow 即清「已触发/回礼代」标记
     h.zeigeName = false;   // 名字改在人群之上统一画（循环后），不再被前排身体盖住
     if (alpha < 1) ctx.globalAlpha = alpha;
-    // 脚下影子：三根短斜线，跳起时人离地、影子钉在原地并收窄变淡
-    const dy = h.akName === 'jump' ? h.motionPose(t).dy : 0;
+    // 脚下影子：三根短斜线，跳起时人离地、影子钉在原地并收窄变淡；lean 让影子跟着微斜（人歪影子歪）
+    const pose = h.motionPose(t);   // 纯函数，update 里每帧已算过一次；此处复用姿态的 lean 通道
+    const dy = h.akName === 'jump' ? pose.dy : 0;
     const schrumpf = 1 - Math.max(0, -dy) * .7;
+    const le = pose.lean * p.mass * .25;   // dance 峰值 ±.14 → ±~2px；wave .05、walk .03 顺带 ≤1px 微斜
+    const sh = (y) => le * (p.bodenY + 3.5 - y) / 1.5;   // 绕影子块中心均匀斜率：三根线读作整体转了个小角度（上端跟肩走）
     for (let f = 0; f < 3; f++) {
       const fo = (f - 1) * .12;
       bodenStift.zug([
-        { x: p.x + (fo - .1) * p.mass * schrumpf, y: p.bodenY + 2 + f },
-        { x: p.x + (fo + .1) * p.mass * schrumpf, y: p.bodenY + 3 + f },
+        { x: p.x + (fo - .1) * p.mass * schrumpf + sh(p.bodenY + 2 + f), y: p.bodenY + 2 + f },
+        { x: p.x + (fo + .1) * p.mass * schrumpf + sh(p.bodenY + 3 + f), y: p.bodenY + 3 + f },
       ], { spur: `schatten${i}-${f}`, w: 1, deckung: .22 * schrumpf, eckig: true });
     }
     // 精灵缓存命中即贴图；未命中才整颗头重画（12fps 换帧，翻书感不变）

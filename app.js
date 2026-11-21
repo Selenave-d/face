@@ -1383,7 +1383,7 @@ function drawGlasses(stift, ctx3d, feldL, feldR, augenMass, kind, pal, kopf, lay
       if (kind === 'halbmond') ey *= .9;
       pts.push(proj({ x: zentrum.x + ex * r, y: zentrum.y + ey * r, z: zentrum.z }));
     }
-    stift.zug(pts, { spur: `glas${idx}`, w: LID_BREITE * .85, wackel: .003, geschlossen: true, farbe: pal.tinte });
+    stift.zug(pts, { spur: `glas${idx}`, w: LID_BREITE * .85, wackel: .004, geschlossen: true, farbe: pal.tinte });   // .003→.004：镜圈是 len≈.6-.9 的长闭合主轮廓（短笔减半规则不适用），全脸最硬长线——跟上眼睑档手感
   };
   glas(a, 0); glas(b, 1);
   const steg = [
@@ -1391,7 +1391,7 @@ function drawGlasses(stift, ctx3d, feldL, feldR, augenMass, kind, pal, kopf, lay
     proj({ x: (a.x + b.x) / 2, y: a.y + r * .34, z: a.z }),
     proj({ x: b.x - r * .96, y: b.y + r * .08, z: b.z }),
   ];
-  stift.zug(steg, { spur: 'steg', w: LID_BREITE * .75, wackel: .003, farbe: pal.tinte });
+  stift.zug(steg, { spur: 'steg', w: LID_BREITE * .75, wackel: .004, farbe: pal.tinte });
   [-1, 1].forEach((s, i) => {
     if (feldAn(s * 1.48, layout.ohrV, ctx3d).nz < -.05) return;
     const c = s < 0 ? a : b;
@@ -1399,7 +1399,7 @@ function drawGlasses(stift, ctx3d, feldL, feldR, augenMass, kind, pal, kopf, lay
     stift.zug([
       proj({ x: c.x + s * r * .98, y: c.y + r * .02, z: c.z }),
       proj(schaedelPunkt(s * 1.42, layout.ohrV + .08, kopf)),
-    ], { spur: `buegel${i}`, w: LID_BREITE * .65, wackel: .003, farbe: pal.tinte, deckung: .85, einlagig: true });
+    ], { spur: `buegel${i}`, w: LID_BREITE * .65, wackel: .004, farbe: pal.tinte, deckung: .85, einlagig: true });
   });
 }
 
