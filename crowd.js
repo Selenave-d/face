@@ -407,6 +407,11 @@ function kleinTick(t) {
   leute[kand[(Math.random() * kand.length) | 0]].setAktion(name, t, AKTIONEN[name].periode);
 }
 
+/* 看热闹伪指针：动作起手后其余站定者看向演员（头转 ±.36 rad——视线是最强注意线索，瞳孔 1-4px 桌面后排看不清）。
+ * update 的指针分支只用 active/x/y 三字段不存引用（clip TOTER_ZEIGER 同款先例）；
+ * 放在 7·mass·.9≈6.3·mass 处：zWach 距离项（3.4·mass 醒觉圈）恒 0，不放大眼睛；模块级单例复用免逐帧建对象 */
+const ZUSCHAU_ZEIGER = { active: true, x: 0, y: 0 };
+
 /* 喷嚏传染：有人打出喷嚏的那一下，~35% 把同排横向最近的站定邻居排个 0.6-1.1s 延迟喷嚏。
  * 队列照烟花 raketen 的语义（绝对时刻、到点即删、feier 清残弹）；存 Head 引用不存站位下标
  * ——resize 会重排 plaetze 下标，Head 对象跨 resize 存活，缩编截掉也只是 indexOf 得 -1 丢弃。
@@ -527,7 +532,7 @@ function kopfSprite(h, p, t, namenAn) {
   }
   const sdpr = Math.min(dpr, p.reihe < 3 ? 1.25 : 1.75);   // 后排小精灵省显存
   const oben = raumBedarf(h).oben;
-  const W = p.mass * 4.4;                    // 横向约束项是帽檐 ±2.1（挥手经臂保长重投只到 ±1.5），半宽 2.2 余 0.1-0.2
+  const W = p.mass * 4.4;                    // 横向约束项是帽檐 ±2.1（挥腕经臂保长重投实到 ±1.9-2.1，宽肩长臂档贴边几个像素），半宽 2.2 余量极薄
   const H = (oben + fussWelt(h) + 1.55) * p.mass;   // 头顶余量 + 全身 + 脚下名字
   if (!sp) sp = h.sprite = { cv: document.createElement('canvas') };
   sp.key = key;
@@ -587,7 +592,32 @@ function rahmen(now) {
     const p = plaetze[i], h = leute[i];
     const alpha = clamp(sicht - p.rang, 0, 1);
     if (alpha <= 0) continue;
-    h.update(dt, t, pointer);
+    // 看热闹：窗口内自己仍站定、演员还在演 → 传伪指针让头转向演员；真指针凑到 3.4·mass 醒觉圈内时让位
+    // （优先级：指针近身 > 看热闹 > 指针跟随 > 游走）；观众自己一动（回礼/传染/被逗）窗口条件自动失效
+    const zuschauert = h.schautBis > t && h.akName === 'stand' && !h.akVon
+      && h.schautAuf && leute.indexOf(h.schautAuf) >= 0 && h.schautAuf.akName !== 'stand';
+    if (zuschauert && !(pointer.active && Math.hypot(pointer.x - h.cx, pointer.y - h.cy) < h.mass * 3.4)) {
+      ZUSCHAU_ZEIGER.x = h.schautAuf.cx + (Math.sign(h.schautAuf.cx - h.cx) || 1) * h.mass * 6.3;
+      ZUSCHAU_ZEIGER.y = h.schautAuf.cy;
+      h.update(dt, t, ZUSCHAU_ZEIGER);
+    } else {
+      h.update(dt, t, pointer);
+    }
+    // 看热闹触发：动作起手 .25s 后（过渡插值完、动作可读），其余可见站定者看向演员 2.2s
+    // （头弹簧 0.5-1s 转到位、看完自动转回；观众是「全部」可见站定者而非仅同排——同排判据会漏掉独占一排的前排正中）
+    if (h.akName !== 'stand' && !h.akVon && t - h.akSeit > .25 && !h.geschaut) {
+      h.geschaut = true;
+      if (sicht <= 5.5 && !feier) {
+        for (let j = 0; j < plaetze.length; j++) {
+          if (j === i) continue;
+          const q2 = plaetze[j], n2 = leute[j];
+          if (clamp(sicht - q2.rang, 0, 1) < 1) continue;
+          if (n2.akName !== 'stand' || n2.akVon || n2.schautBis > t) continue;
+          n2.schautAuf = h; n2.schautBis = t + 2.2;
+        }
+      }
+    }
+    if (h.akName === 'stand') h.geschaut = false;   // 回到站定即重置（下一次动作再触发一轮围观）
     // 打喷嚏：打出来那一下（起手 .63s，pose 前顿段起点）闭一下眼；blinzeltBis 顺手把精灵换帧率提到 24fps
     if (h.akName === 'sneeze') {
       if (!h.niesBl && t - h.akSeit > .63) { h.niesBl = true; h.blinzeltBis = t + .14; niesAnsteckung(i, t); }

@@ -2755,14 +2755,15 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
   }
 
   // 鞋：钉在踝点上，随小腿方向转
-  for (const { s, K, A } of beinKette) {
+  for (const { s, K, A, bp } of beinKette) {
     const shinAng = Math.atan2(A.x - K.x, A.y - K.y);
-    const schuhF = beinHW / .317;   // 中位 beinHW：中位身形鞋宽不变，宽瘦两端与裤脚同调（鞋长不动）
+    const schuhF = beinHW / .317;
+    let zylinderY = 0;   // 中位 beinHW：中位身形鞋宽不变，宽瘦两端与裤脚同调（鞋长不动）
     const fx = A.x, fy = A.y + .18;
     const R = (dx, dy) => rotUm({ x: fx + dx, y: fy + dy }, { x: fx, y: fy - .18 }, -shinAng * .8);
     let schuh;
     if (ko.schuhe === 'stiefel') {
-      const zylinderY = -.36 * Math.sqrt(schuhF);   // 筒顶随腿宽同调（sqrt 阻尼）：宽体不再读矮筒，脚部几何（-.14 起）保持「鞋长不动」
+      zylinderY = -.36 * Math.sqrt(schuhF);   // 筒顶随腿宽同调（sqrt 阻尼）：宽体不再读矮筒，脚部几何（-.14 起）保持「鞋长不动」
       schuh = [
         R(-s * .13 * schuhF, zylinderY), R(s * .1 * schuhF, zylinderY), R(s * .11 * schuhF, -.14),
         R(s * .25 * schuhF, -.1), R(s * .26 * schuhF, -.01), R(-s * .14 * schuhF, -.01),
@@ -2780,6 +2781,19 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     }
     stift.flaeche(schuh, { farbe: pal.schuh, spur: `schuh${s}`, wackel: .004 });
     stift.zug(schuh, { spur: `schuh-rand${s}`, geschlossen: true, ...duenn });
+    // stiefel 筒口短褶：筒顶下缘三道短撇（长短不齐的手绘语言），常驻微斜 s*.012（布料天然搭斜，
+    // 免站姿垂直读作刻度线）+ 随踝横摆加斜 bp.fx*.55（walk ±.08 → ±.044 约 40-50° 微斜）；
+    // 经 R() 落在靴筒局部系自动跟小腿转，这里只叠「布比筒壳软」的残余。fx 恒 0 的动作只剩基斜，稳定不闪
+    if (ko.schuhe === 'stiefel') {
+      for (let f = 0; f < 3; f++) {
+        const x0 = s * (-.055 + f * .05) * schuhF;
+        const lang = [.034, .048, .038][f];
+        stift.zug([
+          R(x0, zylinderY + .012),
+          R(x0 + s * .012 + bp.fx * .55, zylinderY + .012 + lang),
+        ], { spur: `stiefelfalte${s}${f}`, w: .018, wackel: .003, farbe: pal.tinte, deckung: .5, einlagig: true, spitz: .85 });
+      }
+    }
     const sohle = schuh.filter((p) => p.y > fy - .05);
     if (sohle.length >= 2) stift.zug(sohle, { spur: `sohle${s}`, w: .018, wackel: .003, farbe: pal.tinte, deckung: .8 });
   }
@@ -3573,6 +3587,8 @@ const trifftKopf = (h, x, y, tief = 0) => {
 // 命中前先把指针按"画出去的缩放"反算回本地（锚与 frame 的 transform 完全一致：脚边 nameY），
 // 悬停 3% 缓放、换人落纸弹入期间，画面多大命中区就多大——悬停与点击共用这一把尺；
 // 再按 motionPose 把动作位移（跳跃升降/走路横移）一并反算——人在空中也点得中。
+// lean 不反算：头只随 dx/dy 平移（lean 只挪躯干、头钉在框心），肩尖极宽身在 dance lean=.14 时仍留 .08 余量；
+// 若日后把 lean 加到 .24 以上（极宽身肩尖出框），在此补 lean 项。
 // tief 是可选的下沿放宽（单人全身命中传脚底高，整墙/放大走默认 0 行为不变）
 const trifftGezeichnet = (h, x, y, tief = 0) => {
   const k = h.zeigK || 1;
