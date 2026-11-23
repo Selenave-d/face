@@ -68,6 +68,9 @@ const DUO_TITEL_FORM = [
   (a, b) => `${a}${b}街头二重奏`,
   (a, b) => `${a}牵手${b} 全城祝福`,
 ];
+
+// 「已找到」类头版标题（语义已了结，悬赏行跟着改口）：函数身份进集合，生成时带布尔标记
+const DUO_GEFUNDEN_FORM = new Set([DUO_TITEL_FORM[1], DUO_TITEL_FORM[3]]);
 const DUO_NOTIZ = [
   '编者按：确为朋友', '本版编辑仍在找笔', '据称二人从不吵架', '消息来源请求匿名',
   '下期预告：仍是朋友', '校对：另一位朋友', '印刷厂表示满意', '读者来电：很像',
@@ -95,6 +98,14 @@ function texte(seed) {
   // 头版字段全部走独立 label 流且追加在末尾：不动上面 'text' 流的消费顺序，同种子寻人版文案一字不变
   let name2 = chinesischerName(strom(seed, 'name2'));
   if (name2 === name) name2 = chinesischerName(strom(seed, 'name2x'));   // 撞名换独立流重掷（~1/2200 种子）——「张伟找到了张伟」就算了
+  // 寻物版标题与章同词（「急寻X」配「急寻」章，~1/12 寻物种子）时章换独立流重掷——name2 撞名同款手法；
+  // 重掷池滤掉已撞词（4 词池裸重掷有 1/4 撞回，滤后恒剩 3 词不空池——每标题至多含一个章词）。startsWith 收窄误伤面
+  const vTitel = strom(seed, 'vTitel').pick(VERLOREN_TITEL)(name);
+  let vStempel = strom(seed, 'vStempel').pick(VERLOREN_STEMPEL);
+  if (vTitel.startsWith(vStempel)) vStempel = strom(seed, 'vStempelX').pick(VERLOREN_STEMPEL.filter((st) => st !== vStempel));
+  // 头版「已找到」类（语义已了结，悬赏行跟着改口「酬谢已送达」）：函数身份进集合、生成时带布尔——
+  // 不在绘制端做子串嗅探，改措辞不会悄悄漏判
+  const duoForm = strom(seed, 'duoTitel').pick(DUO_TITEL_FORM);
   return {
     blatt: r.pick(BLATT_NAME),
     datum: `19${40 + Math.floor(r.n() * 59)} 年 ${1 + Math.floor(r.n() * 12)} 月 ${1 + Math.floor(r.n() * 28)} 日`,
@@ -112,12 +123,13 @@ function texte(seed) {
     stempel: r.pick(STEMPEL),
     name,
     name2,
-    duoTitel: strom(seed, 'duoTitel').pick(DUO_TITEL_FORM)(name, name2),
+    duoTitel: duoForm(name, name2),
+    duoGefunden: DUO_GEFUNDEN_FORM.has(duoForm),
     duoNote: strom(seed, 'duoNote').pick(DUO_NOTIZ),
     duoLohn: strom(seed, 'duoLohn').pick(DUO_LOHN),
     duoStempel: strom(seed, 'duoStempel').pick(DUO_STEMPEL),
     // 寻物版字段：同样全部独立 label 流；特征三条用部分洗牌（Fisher-Yates 前三步）保证不重
-    verlorenTitel: strom(seed, 'vTitel').pick(VERLOREN_TITEL)(name),
+    verlorenTitel: vTitel,
     merkmale: (() => {
       const r = strom(seed, 'merkmale');
       // 「常戴一顶帽子」只有胸像真戴帽才入池——特征要与肖像对得上（此前约 1/4 寻物版写着帽子配光头）
@@ -131,7 +143,7 @@ function texte(seed) {
     })(),
     ort: strom(seed, 'vOrt').pick(ORTE),
     verlorenLohn: strom(seed, 'vLohn').pick(VERLOREN_LOHN),
-    verlorenStempel: strom(seed, 'vStempel').pick(VERLOREN_STEMPEL),
+    verlorenStempel: vStempel,
   };
 }
 
@@ -509,7 +521,8 @@ function zeichneFront(t, s, tx, P, Q, W, H, p) {
   ctx.font = `bold ${Math.round(W * .038)}px "Courier New", monospace`;
   const dL = druckZeile('lohn', 0);   // 与寻人版共用 lohn 流：版式互斥，同种子同脾气
   ctx.globalAlpha = dL.a;
-  ctx.fillText(tx.duoLohn, P + W / 2, rahmenY + boxH + W * .075 + dL.dy);
+  ctx.fillText(tx.duoGefunden ? tx.duoLohn.replace(/^悬赏：|^酬谢：/, '酬谢已送达：') : tx.duoLohn,
+    P + W / 2, rahmenY + boxH + W * .075 + dL.dy);   // 已找到了结：悬赏改口「酬谢已送达」（保槽换词免漏排空带）
   ctx.restore();
 
   spalten(s, tx, P, Q, W, H, p, rahmenY + boxH + W * .115);

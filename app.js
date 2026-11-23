@@ -3465,6 +3465,18 @@ if (WAND) addEventListener('keydown', (e) => {
       e.preventDefault();
       return;
     }
+    // Home/End 直跳第一颗/最后一颗头（左右键翻墙的长跳版；端头守卫/进出场清表情/layout 重摆全同款规矩）
+    if (e.key === 'Home' || e.key === 'End') {
+      const neu = e.key === 'Home' ? 0 : heads.length - 1;
+      if (neu === vergroessert) { e.preventDefault(); return; }   // 已在端头：不清表情、不重排
+      heads[vergroessert].gesicht = null;
+      vergroessert = neu;
+      heads[vergroessert].gesicht = null;
+      wahl = vergroessert;
+      layout();
+      e.preventDefault();
+      return;
+    }
     const i = '123456'.indexOf(e.key);   // 1 复原 / 2 笑 / 3 怒 / 4 难过 / 5 困 / 6 惊
     if (i < 0) return;
     const g = GESICHT_FOLGE[i];

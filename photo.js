@@ -326,8 +326,33 @@ addEventListener('keydown', (e) => {
   draftPick(i, performance.now() / 1000);
 });
 
+/* 选中孩子的键盘表情：Enter/空格给最后选中的孩子循环换脸（长按逗一下的键盘版，共用 gesichtWeiter）。
+ * 焦点在按钮/链接上时放行——按钮自己的 Enter/空格照常点（选满 5 人后焦点在快门键上按 Enter 就该拍照）；
+ * repeat 拦长按防六表情闪成走马灯 */
+addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (e.repeat) return;
+  if (e.target instanceof Element && e.target.closest('button, a')) return;
+  if (phase !== 'idle' || !gewaehlt.size) return;
+  e.preventDefault();
+  const kind = kinder[[...gewaehlt].pop()];   // Set 插入序 = 选择序：最近仍在选中的那颗（唯一选中即它）
+  if (kind && kind.zustand === 'da') gesichtWeiter(kind, performance.now() / 1000);
+});
+
 /* 长按逗一下：按住一个孩子 ~0.4s 循环换表情（单击仍是选择/取消，互不干扰） */
 const FOLGE = ['ruhig', 'froh', 'boese', 'angst', 'weint', 'schlaeft'];
+/* 换脸公共段：长按逗一下与键盘 Enter/空格共用。清 laune/害羞计时、seit 重记「怕 2 秒」
+ * 都是载荷——抄漏 seit 的话主循环的 angst 2s 回收下一帧就把刚换的表情吃掉 */
+function gesichtWeiter(kind, t) {
+  kind.laune = null;                     // 手动表情优先，压过自动小情绪
+  kind.angestarrtSeit = 0; kind.schuechternVon = 0; kind.schuechternBis = 0;   // 换脸也清害羞（别等余韵）
+  const i = FOLGE.indexOf(kind.face);
+  kind.face = FOLGE[(i >= 0 ? i + 1 : 1) % FOLGE.length];
+  kind.hopT = t;                         // 换表情小跳一下：输入要有即时可见反馈
+  kind.seit = t;                         // 「怕 2 秒」重新计时——换到怕不会下一帧就被入场逻辑弹回平静
+  kind.hopAmp = .2;
+}
 let klickSperre = false;
 let druckTimer = 0;
 let druckX = 0, druckY = 0;
@@ -341,13 +366,7 @@ canvas.addEventListener('pointerdown', (e) => {
   druckTimer = setTimeout(() => {
     if (phase !== 'idle') return;
     klickSperre = true;
-    kind.laune = null;                     // 手动表情优先，压过自动小情绪
-    kind.angestarrtSeit = 0; kind.schuechternVon = 0; kind.schuechternBis = 0;   // 换脸也清害羞（别等余韵）
-    const i = FOLGE.indexOf(kind.face);
-    kind.face = FOLGE[(i >= 0 ? i + 1 : 1) % FOLGE.length];
-    kind.hopT = performance.now() / 1000;  // 换表情小跳一下：输入要有即时可见反馈
-    kind.seit = kind.hopT;                 // 「怕 2 秒」重新计时——换到怕不会下一帧就被入场逻辑弹回平静
-    kind.hopAmp = .2;
+    gesichtWeiter(kind, performance.now() / 1000);
   }, 400);
 });
 // 指针挪出 ~10px 视为拖动/改主意：取消长按——否则滑到别的孩子身上 0.4s 后仍会戳中先按住的那个
