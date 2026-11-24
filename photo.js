@@ -476,6 +476,8 @@ function draftPick(i, t) {
 function knips(t) {
   if (gewaehlt.size !== 5 || phase !== 'idle') return;
   knipsBtn.disabled = true;   // 过场全程禁点：连点守卫静默吞掉无反馈，看起来像没反应
+  knipsBtn.classList.add('pulse');   // 快门脉冲：守卫已拦连点/未选满，仅成功拍照触发
+  setTimeout(() => knipsBtn.classList.remove('pulse'), 350);
   ergebnis = besteHand([...gewaehlt].map((i) => kinder[i]), besitz);
   // 年鉴首录：升级后与升级前的名字都算（橡皮把一对升成两对，不影响「一对」的收录）
   const neu = [...new Set([ergebnis.name, ergebnis.original])].filter((n) => n && !jahrbuch.has(n));
@@ -1160,6 +1162,48 @@ function zeichneBesitz(t) {
   });
 }
 
+/* 打盹传染：孩子自然入睡后 1-2s，同排最近的平静邻座 ~40% 也跟着打起盹（crowd 喷嚏传染的表情级同族）。
+ * 队列照 crowd.js niesAnsteck 语义：存 kind 引用 + 绝对时刻、到点即删、fire 前重验——换班清 kinder 后
+ * indexOf 得 -1 自然丢弃不悬空。防链式用最简法：只有自然 laune 分支（要求 laune 为空才进）会入队，
+ * 传染设下的 laune 永远到不了入队点——一代即止，无需 crowd 的 niesKontakt 代际标记。 */
+const schlafAnsteck = [];
+// 同排最近的在场邻座（x = W*((i+.5)/5) 线性，同排 |Δplatz| 最小即横向最近）
+function naechsterNachbar(i) {
+  const reihe = Math.floor(kinder[i].platz / KINDER_PRO_REIHE);
+  let best = -1, bestD = 1e9;
+  kinder.forEach((k, j) => {
+    if (j === i || k.zustand !== 'da') return;
+    if (Math.floor(k.platz / KINDER_PRO_REIHE) !== reihe) return;
+    const d = Math.abs(k.platz - kinder[i].platz);
+    if (d < bestD) { bestD = d; best = j; }
+  });
+  return best;
+}
+function schlafAnsteckung(i, t) {
+  const j = naechsterNachbar(i);
+  if (j < 0) return;
+  schlafAnsteck.push({ wer: kinder[j], von: kinder[i], bei: t + 1 + Math.random() });
+}
+function schlafAnsteckTick(t) {
+  for (let k = schlafAnsteck.length - 1; k >= 0; k--) {
+    const e = schlafAnsteck[k];
+    if (t < e.bei) continue;
+    schlafAnsteck.splice(k, 1);
+    if (phase !== 'idle') continue;                      // 过场（拍照/换班）里不入睡
+    if (e.von.laune !== 'schlaeft') continue;            // 源头已醒/被覆盖：检测发生在「仍睡着」那一刻
+    const i = kinder.indexOf(e.wer);
+    if (i < 0) continue;                                 // 换班把人清走了
+    const n = e.wer;
+    if (n.zustand !== 'da' || n.face !== 'ruhig'         // laune 段同款守卫：被选/长按换脸/小情绪/新来的怕都让位
+      || gewaehlt.has(i) || n.schuechternVon || t < n.schuechternBis
+      || t - n.tippVon < 2.2) continue;                  // 垫脚表演中不入睡
+    if (Math.random() >= .4) continue;
+    n.laune = 'schlaeft'; n.face = 'schlaeft';           // 复用既有 laune 回收：launeBis 到点主循环自动还原 ruhig
+    n.launeBis = t + 2 + Math.random() * 2;
+    n.naechsteLaune = n.launeBis + 7 + n.launeWuerfel() * 18;   // 醒来别立刻又掷情绪
+  }
+}
+
 /* ================= 主循环 ================= */
 
 let vorige = 0;
@@ -1170,6 +1214,7 @@ function rahmen(now) {
   vorige = t;
 
   phaseTick(t);
+  schlafAnsteckTick(t);   // 打盹传染到点开火
 
   // 过场位移（按绝对时间，冻结时间下也确定）
   for (const kind of kinder) {
@@ -1217,6 +1262,7 @@ function rahmen(now) {
       kind.face = kind.laune;
       kind.launeBis = t + 1.6 + kind.launeWuerfel() * 1.9;
       kind.naechsteLaune = kind.launeBis + 7 + kind.launeWuerfel() * 18;
+      if (kind.laune === 'schlaeft') schlafAnsteckung(kinder.indexOf(kind), t);   // 入睡即排邻座延迟检测（1-2s 后且源仍睡着才开火）
     }
     // 后排垫脚偷看：独立钟（不进 laune 池——那是情绪，这是姿态；laune 表达不了「仅后排」）
     else if (kind.g && kind.g.hinten && phase === 'idle' && kind.zustand === 'da' && kind.face === 'ruhig'

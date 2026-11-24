@@ -35,6 +35,21 @@
   #leiste button:hover { color: #2b2320; border-color: #2b2320; }
   #leiste button:disabled { opacity: .45; cursor: default; }
   #leiste button:disabled:hover { color: #7a7268; border-color: #c9c1b5; }
+  /* 快门脉冲：拍照那 0.3s 按钮按下缩进、边框加深（JS 加 .pulse、350ms 后移除——纯 CSS 过渡零 rAF）。
+   * 过场全程按钮 disabled（.45 灰）——脉冲规则须显式盖回 opacity 并压过 :disabled / :disabled:hover
+   * （特异性平级、源序在后稳赢）；#leiste 容器才有 translateX，按钮身上 translateY 无冲突。
+   * transition 放基座：放 .pulse 上则移除类时会瞬跳；副作用是 hover 变色也带 .18s 渐变（顺手的质感） */
+  #leiste button {
+    transition: color .18s ease, border-color .18s ease, background-color .18s ease,
+      opacity .18s ease, transform .18s ease, box-shadow .18s ease;
+  }
+  #leiste button.pulse, #leiste button.pulse:disabled {
+    opacity: 1;                     /* 盖过 :disabled 的 .45：脉冲窗口按钮醒目，呼应全员看镜头的仪式感 */
+    color: #2b2320; border-color: #2b2320;
+    background: #e9e2d6;            /* 按下微沉的纸色 */
+    transform: translateY(1px);     /* 按下缩进 */
+    box-shadow: inset 0 1px 3px rgba(43, 35, 32, .18);
+  }
   /* 手机端：标题换行、导航与过滤器收紧、按钮条折行、去双击缩放 */
   @media (max-width: 719px) {
     body { overscroll-behavior: none; }
