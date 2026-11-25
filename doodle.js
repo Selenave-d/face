@@ -1078,7 +1078,12 @@ function zeichneExtras(stift, rec, k, kopf, face = 'ruhig', qt = 0) {
     for (const s of [-1, 1]) {
       const r = _mb(_h2(rec.seed, 43 + s));
       for (let i = 0; i < 3; i++) {
-        stift.dot(s * R * .5 + (r() - .5) * .08 * k, cy + .14 * k + (r() - .5) * .05 * k, .012 * k, .5, 152 + i + s);
+        // 垂耳狗雀斑 x 钳制：耳翼内缘≈R(.62wf-.02…+.06)，窄脸(wf≲.95)时外缘 1-2 颗曾骑上耳瓣
+        // 读作「耳朵长雀斑」；钳到 R(.62wf-.04) 距最肥耳内缘尚余≈1 点径（胡须外推同款手法）。
+        // wide/其余物种钳值不 binding，逐字节不变
+        const fx = Math.min(R * .5 + (r() - .5) * .08 * k,
+          rec.crest.style === 'floppy' ? R * (rec.skull.wf * .62 - .04) : 1e9);
+        stift.dot(s * fx, cy + .14 * k + (r() - .5) * .05 * k, .012 * k, .5, 152 + i + s);
       }
     }
   }

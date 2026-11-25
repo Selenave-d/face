@@ -357,7 +357,10 @@ function feierTick(t) {
       if (h.akBis > t + .05) return;   // 上一拍的动作还没演完：让它演完，下一拍归队
       const art = i % 6;
       const name = art === 1 ? 'wave' : art === 4 ? 'dance' : 'jump';
-      h.setAktion(name, t, AKTIONEN[name].periode);   // 各按自然周期收尾，重开时不从半空拽回
+      // 起跳错相：每人加 taktVersatz*.5（站姿呼吸已在用的每人错相旋钮∈[0,1)）——500 人同步浪变错落起跳；
+      // 未来起点引擎隐性支持（延迟窗内 motionPose f=0 定格站姿，呼吸幅度 .012 不可见）；
+      // i*0.05 方案已否决：满编 25s 铺开太慢且与绘制序刚性相关
+      h.setAktion(name, t + h.dna.taktVersatz * .5, AKTIONEN[name].periode);   // 各按自然周期收尾，重开时不从半空拽回
     });
     sprungBei = t + FEIER_TAKT;
   }
