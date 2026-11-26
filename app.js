@@ -2553,6 +2553,28 @@ const AKTIONEN = {
       return p;
     },
   },
+  // 痒：被指针在身上来回蹭了几下——肩一缩、头快摆躲两下、手臂微张。0.8s 一趟，
+  // 触发端在单人页主循环 frame() 的蹭检测，不进 AKTION_NAMEN/自动池——
+  // 键盘/按钮/他页掷不到（同 sneeze/highfive「注册不指名」先例）
+  kitzel: {
+    periode: .8,
+    pose(q) {
+      const p = neutralPose();
+      const t = (((q / .8) % 1) + 1) % 1;
+      const env = t < .85 ? Math.sin(t / .85 * Math.PI) : 0;   // 抖起→收平，结尾归零（akVon 插值再兜一手）
+      const zitter = Math.sin(t * TAU * 4);   // 4 来回/.8s=5Hz：12fps 量化下的可读上限（奈奎斯特 6Hz，再高混叠成慢漂）
+      p.kopfRoll = .045 * zitter * env;   // 扭头躲：快速小幅侧摆（dance 用到 .07，POSE_LIMIT.roll=.14 内）
+      p.kopfNick = .05 * env;             // 缩下巴
+      p.lean = .02 * Math.sin(t * TAU * 4 + 1.2) * env;   // 肩抖，与头错相
+      p.dy = .035 * env;                  // 缩肩微沉（bow 用 .09）
+      for (let i = 0; i < 2; i++) {
+        const s = i ? 1 : -1;
+        p.arm[i] = { ex: s * .1 * env, ey: .04 * env, hx: s * .16 * env, hy: .12 * env };   // 手臂微张护痒
+        p.bein[i] = { kx: 0, ky: 0, fx: 0, fy: -2 * p.dy };   // 踝补偿 -2×dy：脚钉地（bow/sneeze 同款）
+      }
+      return p;
+    },
+  },
   // 击掌：同排相邻两人互拍（crowd.js kleinTick 成对触发，两名同 t 同周期逐帧同步；接触相位 .28*1.4≈.39s）
   highfiveR: { periode: 1.4, pose: highfivePose(1) },
   highfiveL: { periode: 1.4, pose: highfivePose(-1) },
@@ -3379,6 +3401,11 @@ addEventListener('pointerleave', () => { pointer.active = false; });
 document.addEventListener('mouseleave', () => { pointer.active = false; });
 addEventListener('blur', () => { pointer.active = false; });
 
+// —— 痒痒（单人页专属）：指针在人身上来回蹭——蹭够路径长就缩肩扭头抖两下 ——
+let kitzelWeg = 0;                 // 命中椭圆内累计蹭动路径（px）；滑出清零、停住靠每帧衰减
+let kitzelPx = 0, kitzelPy = 0;    // 上一帧指针位置：帧间位移=这一帧蹭掉的长度
+let kitzelBis = -9;                // 痒的冷却下限时刻：触发后 6-10s 不再痒
+
 if (!FOTO && !CROWD && !CLIP && !AVATAR) {
   addEventListener('resize', layout);
   document.getElementById('neues')?.addEventListener('click', reshuffle);
@@ -3638,6 +3665,23 @@ function frame(now) {
     hoverIdx = wahl;   // 键盘选中复用悬停缓放反馈（纯键盘时 pointer.active 为 false）
   }
   canvas.style.cursor = hoverIdx >= 0 ? 'pointer' : 'crosshair';
+  // 蹭痒检测（单人页专属）：hoverIdx>=0 即「指针在命中椭圆里」（上面悬停判定白送的通道）；
+  // >2px/帧=真在动而非停留，<mass*.6 排除切窗口瞬移的假路径
+  if (!WAND && heads[0]) {
+    const strecke = Math.hypot(pointer.x - kitzelPx, pointer.y - kitzelPy);
+    if (hoverIdx >= 0 && strecke > 2 && strecke < heads[0].mass * .6) {
+      kitzelWeg = kitzelWeg * .95 + strecke;   // 5%/帧衰减：停住约 0.2s 旧路径忘光
+      if (kitzelWeg > heads[0].mass * 2 && heads[0].akName === 'stand' && t > kitzelBis) {
+        kitzelBis = t + 6 + heads[0].wuerfel() * 4;   // 冷却 6-10s（种子随机，换人也换节奏）
+        kitzelWeg = 0;
+        heads[0].setAktion('kitzel', t, AKTIONEN.kitzel.periode);   // 演完经 akBis 自动回 stand
+        heads[0].akAuto = Math.max(heads[0].akAuto, t + 15);   // 同 waehleAktion：别被随机动作钟顶掉
+      }
+    } else if (hoverIdx < 0) {
+      kitzelWeg = 0;   // 滑出椭圆：整段作废（椭圆内停住不清零——蹭两下歇一下再蹭还算数）
+    }
+    kitzelPx = pointer.x; kitzelPy = pointer.y;
+  }
   zuZeichnen.forEach((head, i) => {
     head.update(dt, t, pointer);
     head.hoverA = (head.hoverA ?? 0) + ((i === hoverIdx ? 1 : 0) - (head.hoverA ?? 0)) * Math.min(1, dt * 10);

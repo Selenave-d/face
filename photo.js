@@ -445,6 +445,10 @@ if (stand) {
 
 /* 墨渍：墨水介质的孩子离场时，在站过的架子上留一片渐渐变淡的墨渍（墙上的记忆） */
 const mauernFlecken = [];     // { fx, reihe, seed, von }——存槽位分数与行号，绘制时按当前窗口重投影（架子线随 resize 变，墨渍钉在架上不悬空）
+/* 墙影：离场孩子的淡灰剪影钉在架上（横向随种子让开半格，防同槽新孩子挡死）。
+ * rec 存引用（贴纸 ab.recs 同款先例）；会话内存不进存档（同 abzuege 政策——rec 不可 JSON 化，
+ * 持久化重生在过滤器下会「换了个人」，成本远超收益） */
+const wandGeister = [];       // { fx, reihe, rec, von }
 
 function machRequisit(nimmNicht) {
   const r = strom((klassenSeed * 7 + ++draftZaehler * 7919) | 0, 'requisit');
@@ -562,6 +566,15 @@ function phaseTick(t) {
     for (const i of gewaehlt) {
       const kind = kinder[i];
       kind.zustand = 'geht'; kind.seit = t; kind.face = 'weint';
+      {   // 墙影：不论介质，离场就留影（墙记的是「人来过」，不是介质的渗漏）
+        const rG = strom(kind.rec.seed, 'wandafrisch');
+        wandGeister.push({
+          fx: Math.min(.97, Math.max(.03, (kind.platz % KINDER_PRO_REIHE + .5) / KINDER_PRO_REIHE + (rG.n() - .5) * .12)),
+          reihe: Math.floor(kind.platz / KINDER_PRO_REIHE),
+          rec: kind.rec, von: t,
+        });
+        if (wandGeister.length > 5) wandGeister.shift();   // 墙上最多五个影子：正好上一张合影那五人
+      }
       if (kind.rec.media === 'ink' || kind.rec.media === 'marker' || kind.rec.media === 'watercolour') {   // 墨水渗墨渍、马克笔蹭划痕、水彩晕出淡彩痕
         // 存槽位分数 + 行号（clip.js 锈斑同款）：resize 后按架子线重投影，不再悬空/入地
         mauernFlecken.push({ fx: (kind.platz % KINDER_PRO_REIHE + .5) / KINDER_PRO_REIHE,
@@ -1028,6 +1041,24 @@ function zeichneMauernFlecken(t) {
   }
 }
 
+// 墙影：离场孩子的淡灰剪影——墨渍层后、孩子们之前。介质强制 graphite + globalAlpha .13：
+// 报纸风「档案照重印」式的淡影；t 传 f.von 冻结 8fps 笔沸（干了的墨不再沸腾——影是记忆不是活人，
+// 不呼吸不眨眼）；flach 走贴纸的扁平上色并免掉地面速写
+function zeichneWandGeister(t) {
+  for (let i = wandGeister.length - 1; i >= 0; i--) {
+    const f = wandGeister[i];
+    const alter = t - f.von;
+    if (alter > 48) { wandGeister.splice(i, 1); continue; }   // 比墨渍（24s）留得久：记忆感
+    const g = platzGeometrie(f.reihe * KINDER_PRO_REIHE);
+    const k = Math.min(g.hinten ? innerHeight * .115 : innerHeight * .15, innerWidth / 5.6) * .6;   // 六成高：读作章
+    ctx.save();
+    ctx.globalAlpha = .13 * (1 - alter / 48);
+    drawDoodle(ctx, { ...f.rec, media: 'graphite', farbe: 0 }, innerWidth * f.fx, g.fussY, k, f.von,
+      { face: 'ruhig', flach: true });
+    ctx.restore();
+  }
+}
+
 // 冲洗合影：右下角的贴纸照片堆（最新的在最上，旧的垫底偏移淡出）
 // 卡面主体画进任意 ctx（离屏 memo 用）；边线 label 掺照片自己的种子（稳定、不随出栈变），
 // 同帧各张照片的抖动各不相同，又不会因栈顶推移而重掷
@@ -1230,7 +1261,8 @@ function rahmen(now) {
   papierSchnell();
   regale(t);
   zeichneRegalDeko(t);   // 架上陈设：站在空档里当布景，画在孩子之前形成层次
-  zeichneMauernFlecken(t);   // 墨渍在墙上：贴纸之前、孩子们最后
+  zeichneMauernFlecken(t);
+  zeichneWandGeister(t);   // 离场孩子的淡影钉在墙上：墨渍之后、孩子们之前   // 墨渍在墙上：贴纸之前、孩子们最后
   zeichneAbzuege(t);   // 贴纸照片贴在墙上：画在孩子们后面，人挡住贴纸而不是贴纸挡人
 
   // 后排先画（前排压住后排的脚，深度自然）
