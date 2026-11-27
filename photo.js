@@ -1075,7 +1075,11 @@ function abZeichnen(c, st, ab, w, band, h, qt, mob) {
   const kK = (w - 20) / 5 * .78;
   const fussY = h - band - 6;
   ab.recs.forEach((rec, i) => {
-    drawDoodle(c, rec, 12 + (w - 24) * (i + .5) / 5, fussY, kK, qt, { face: 'froh', flach: true });
+    // 表情各异：大多在笑，少数正经/吓一跳（doodle 词表无 staune——用 angst 的 wide 眼当「惊」）；
+    // 按 rec.seed 掷 → 同一孩子在多张贴纸里表情一致（人设连续），memo 重建重掷同值稳定不闪
+    const r = strom(rec.seed, 'stempel-face').n();
+    drawDoodle(c, rec, 12 + (w - 24) * (i + .5) / 5, fussY, kK, qt, {
+      face: r < .6 ? 'froh' : r < .85 ? 'ruhig' : 'angst', flach: true });
   });
   // 底边白带上手写牌型
   c.font = `${mob ? 9 : 10}px "Kaiti", "STKaiti", "楷体", serif`;
@@ -1355,6 +1359,28 @@ function rahmen(now) {
       ? -Math.sin(hopDt / .7 * Math.PI) * kind.hopAmp * kind.k
       : 0;
     const kamera = t < kind.kameraBis;   // 摆姿势：平静脸（各自配方眼型保留瞳点，视线才看得见）+ 不眨眼
+    // 魇出场墨晕：来临那 .7s，脚下一圈纸上洇开的淡墨——跟着孩子滑入（魇拖着它自己的暗），
+    // 随入场淡出。形状只吃 rec.seed（kreisPts 的 wobble 不吃时间，不逐帧重掷），只有 alpha 在动；
+    // 不问介质（同墙影「墙记的是人来过」的立场——是魇的氛围，不是介质渗漏）。
+    // 扁椭圆（ry=.4rx 地面透视）只填不描、三片 wobble 圆叠出洇开边缘——参数全抄墙墨渍一族
+    if (kind.rec.art === 'alp' && kind.zustand === 'kommen') {
+      const e = t - kind.seit;
+      const a = Math.min(1, e / .18) * Math.max(0, 1 - e / .7);   // .18s 洇开 → .7s 随入场收干
+      if (a > 0) {
+        const fluss = 1 + .12 * Math.min(1, e / .7);              // 墨缓缓往外洇一圈（+12%）
+        ctx.save();
+        [[0, .015, .6], [.3, .05, .33], [-.32, .065, .25]].forEach(([fx, fy, fr], j) => {
+          const pts = kreisPts(kind.x + fx * kind.k, kind.footY + fy * kind.k,
+            fr * kind.k * fluss, fr * kind.k * .4 * fluss, 12, .22, kind.rec.seed + j * 17);
+          ctx.beginPath();
+          pts.forEach((p, q) => (q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+          ctx.closePath();
+          ctx.fillStyle = `rgba(42,38,32,${.22 * a})`;
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+    }
     drawDoodle(ctx, kind.rec, kind.x, kind.footY, kind.k, t, { blink: kamera ? false : qt < kind.blinkBis, hop, tipp, face: kamera ? 'ruhig' : kind.face, blick: { x: kind.bx, y: kind.by } });
     zeichneName(kind);
   }
