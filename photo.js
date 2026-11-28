@@ -494,9 +494,14 @@ function knips(t) {
   if (erste) ergebnis = { ...ergebnis, notes: [...(ergebnis.notes ?? []), '年鉴+200'] };
   gesamt += ergebnis.punkte + (erste ? 200 : 0);   // 先乘后加：+200 是集邮固定赏，不进征集令 ×1.5
   bannerBis = t + 2;
-  // 冲洗一张贴纸照片：记住这五个人和牌型
+  // 冲洗一张贴纸照片：记住这五个人和牌型。闭眼废片：眨在正中那一拍（核心窗 .06s）才算——
+  // 整个 .14s 窗会给到每张 ~21%、墙上五成时间挂着废片（彩蛋变常驻瑕疵）；
+  // kamera 窗只改绘制层不改 blinkBis，这里读的恰是快门时刻、覆盖之前的真实眨眼状态
+  const fuenf = [...gewaehlt];
+  const qt0 = Math.floor(t * 12) / 12;   // 快门那拍的 12fps 刻——与主循环眨眼钟同口径
   abzuege.push({
-    recs: [...gewaehlt].map((i) => kinder[i].rec),
+    recs: fuenf.map((i) => kinder[i].rec),
+    blinde: fuenf.map((i) => qt0 >= kinder[i].blinkBis - .10 && qt0 < kinder[i].blinkBis - .04),
     titel: ergebnis.name,
     stempel: erste ? '首' : '再',   // 首录盖「首」、重录盖「再」：毕业集齐后重录不再零反馈（二周目动力），毕业前重录已录牌型同样有交代
     datum: `${new Date().getMonth() + 1}月${new Date().getDate()}日`,   // 拍立得白带的手写日期
@@ -1079,7 +1084,8 @@ function abZeichnen(c, st, ab, w, band, h, qt, mob) {
     // 按 rec.seed 掷 → 同一孩子在多张贴纸里表情一致（人设连续），memo 重建重掷同值稳定不闪
     const r = strom(rec.seed, 'stempel-face').n();
     drawDoodle(c, rec, 12 + (w - 24) * (i + .5) / 5, fussY, kK, qt, {
-      face: r < .6 ? 'froh' : r < .85 ? 'ruhig' : 'angst', flach: true });
+      face: ab.blinde?.[i] ? 'schlaeft' : r < .6 ? 'froh' : r < .85 ? 'ruhig' : 'angst',   // 闭眼废片优先覆盖（schlaeft 闭眼必然可见——blink 弧与笑眼在 25px 下不可分辨）；?. 兜底旧结构
+      flach: true });
   });
   // 底边白带上手写牌型
   c.font = `${mob ? 9 : 10}px "Kaiti", "STKaiti", "楷体", serif`;

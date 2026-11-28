@@ -1235,7 +1235,7 @@ function drawDoodle(ctx, rec, X, footY, k, t, anim = {}) {
     zeichneMund(stift, rec, k, face);
   }
   zeichneExtras(stift, rec, k, kopf, face, qt);
-  if (face === 'schlaeft') zeichneZzz(stift, rec, k, qt);
+  if (face === 'schlaeft' && !anim.flach) zeichneZzz(stift, rec, k, qt);   // 贴纸不飘 z：照片是静物（zeichneBoden 同款 flach 守卫；不动睡眠锚逻辑）
 
   ctx.restore();
 }

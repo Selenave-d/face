@@ -780,6 +780,8 @@ class Head {
     this.hutDx = 0;   // 帽子横向惯性：身体 dx 的低通滞后值（头只跟 dx，lean 只挪身体）
     this.haarDy = 0;   // 发梢惯性：比帽轻 τ 稍长更飘
     this.haarDx = 0;
+    this.manschLag = [{ x: 0, y: 0 }, { x: 0, y: 0 }];   // 袖口惯性：袖口所在关节（短袖=肘、长袖=腕）的世界位移低通
+    this.saumLag = [{ x: 0, y: 0 }, { x: 0, y: 0 }];     // 裤脚惯性：踝的世界位移低通
   }
 
   // 切换动作：先拍下当前混合姿态，再在新旧之间做 0.25s 插值
@@ -856,6 +858,19 @@ class Head {
     this.hutDx += (mp.dx - this.hutDx) * (1 - Math.exp(-dt / .047));   // 横向同款：dance 重心倒换时帽尖晚半拍跟上
     this.haarDy += (mp.dy - this.haarDy) * (1 - Math.exp(-dt / .06));  // 发梢 τ=60ms：比帽轻更飘
     this.haarDx += (mp.dx - this.haarDx) * (1 - Math.exp(-dt / .06));
+    // 袖口/裤脚惯性：布口包着的那个关节的世界位移（dx+关节偏移，低通线性可合并滤）低通——
+    // 布比肢体软，铺开只在动作瞬态出现；τ=75ms 比发梢再软半档。stand 残差 .002u≈.2px 恰压噪声线（严格不动点）
+    const gS = 1 - Math.exp(-dt / .075);
+    const kurzA = this.dna.koerper.oberteil === 'tshirt';
+    for (let i = 0; i < 2; i++) {
+      const qx = mp.dx + (kurzA ? mp.arm[i].ex : mp.arm[i].hx);
+      const qy = mp.dy + (kurzA ? mp.arm[i].ey : mp.arm[i].hy);
+      this.manschLag[i].x += (qx - this.manschLag[i].x) * gS;
+      this.manschLag[i].y += (qy - this.manschLag[i].y) * gS;
+      const ax = mp.dx + mp.bein[i].fx, ay = mp.dy + mp.bein[i].fy;
+      this.saumLag[i].x += (ax - this.saumLag[i].x) * gS;
+      this.saumLag[i].y += (ay - this.saumLag[i].y) * gS;
+    }
     if (t > this.naechsterBlink) {
       this.blinzeltBis = t + .14;
       this.naechsterBlink = t + (this.wach > .5 ? 1.6 : 3) + this.wuerfel() * 4;
@@ -2602,7 +2617,7 @@ function gliedKette(pts, breiten) {
 
 /* ---------------- 身体绘制 ---------------- */
 
-function drawBody(stift, dna, pal, hals, atem, pose) {
+function drawBody(stift, dna, pal, hals, atem, pose, lag = null) {
   const k = dna.kopf, ko = dna.koerper;
   const kopfH = k.ry * 1.9;
   const bodyLen = ko.ratio * kopfH;
@@ -2699,9 +2714,14 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
         const bn = Math.hypot(bx0, by0) || 1;
         bx = bx0 / bn; by = by0 / bn;
       }
+      // 袖口惯性铺开：布口对肘的滞后差值沿鼓出向单侧拖尾（布只拖后不前挺、不加宽——横向投影 ≤.4px 已定量否决）；
+      // stand 残差 .002u 不可见（严格不动点），dance/jump/highfive 瞬态 2-5px
+      const mlag = lag?.mansch?.[s < 0 ? 0 : 1] ?? { x: 0, y: 0 };
+      const mdrag = clamp((mlag.x - (pose.dx + ap.ex)) * bx + (mlag.y - (pose.dy + ap.ey)) * by, 0, .09);
+      const wulst = .06 + mdrag * .45;
       stift.zug([
         { x: E.x + nE.x * armW * 1.05, y: E.y + nE.y * armW * 1.05 },
-        { x: E.x + bx * .06, y: E.y + by * .06 },
+        { x: E.x + bx * wulst, y: E.y + by * wulst },
         { x: E.x - nE.x * armW * 1.05, y: E.y - nE.y * armW * 1.05 },
       ], { spur: `manschette${s}`, ...duenn });
       handFn(W.x, W.y, s, -foreArmAng * .8);
@@ -2722,8 +2742,13 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
         ], { spur: `falte-elle${s}${f}`, ...duenn, deckung: .5, einlagig: true, spitz: .85 });
       }
       const nW = pathNormals([E, W])[1];
+      // 长袖收线同款惯性铺开：滞后差值沿前臂外向单侧鼓（W-E 方向）；wave 甩腕瞬态 3-5px
+      const mlag = lag?.mansch?.[s < 0 ? 0 : 1] ?? { x: 0, y: 0 };
+      const mfx = (W.x - E.x) / (Math.hypot(W.x - E.x, W.y - E.y) || 1), mfy = (W.y - E.y) / (Math.hypot(W.x - E.x, W.y - E.y) || 1);
+      const mdrag = clamp((mlag.x - (pose.dx + ap.hx)) * mfx + (mlag.y - (pose.dy + ap.hy)) * mfy, 0, .09);
       stift.zug([
         { x: W.x + nW.x * armW * .8, y: W.y + nW.y * armW * .8 },
+        { x: W.x + mfx * mdrag * .45, y: W.y + mfy * mdrag * .45 },
         { x: W.x - nW.x * armW * .8, y: W.y - nW.y * armW * .8 },
       ], { spur: `manschette${s}`, ...duenn, deckung: .7 });
       handFn(W.x, W.y, s, -foreArmAng * .8);
@@ -2759,7 +2784,7 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
     ];
     stift.flaeche(bruecke, { farbe: pal.hose, spur: 'hose', wackel: .005 });
     stift.zug(bruecke, { spur: 'hose-rand', geschlossen: true, ...linie });
-    for (const { s, H, K, A } of beinKette) {
+    for (const { s, H, K, A, bp } of beinKette) {
       const bein = gliedKette([H, K, A], [beinHW * .85, beinHW * .68, beinHW * .5]);
       stift.flaeche(bein, { farbe: pal.hose, spur: `bein${s}`, wackel: .005 });
       stift.zug(bein, { spur: `bein-rand${s}`, geschlossen: true, ...linie });
@@ -2767,10 +2792,23 @@ function drawBody(stift, dna, pal, hals, atem, pose) {
       // 等价「裤脚塞进靴筒」，收口线不再探出筒侧悬空；其他鞋型零影响
       const nA = pathNormals([K, A])[1];
       const muendHW = ko.schuhe === 'stiefel' ? Math.min(beinHW * .5, .095 * beinHW / .317) : beinHW * .5;
-      stift.zug([
-        { x: A.x + nA.x * muendHW, y: A.y + nA.y * muendHW },
-        { x: A.x - nA.x * muendHW, y: A.y - nA.y * muendHW },
-      ], { spur: `hosenbein${s}`, ...duenn, deckung: .7 });
+      if (ko.schuhe === 'stiefel') {
+        // 塞进靴筒的裤口不铺开：筒口三道褶已扛住靴布的软（直线钳口原样）
+        stift.zug([
+          { x: A.x + nA.x * muendHW, y: A.y + nA.y * muendHW },
+          { x: A.x - nA.x * muendHW, y: A.y - nA.y * muendHW },
+        ], { spur: `hosenbein${s}`, ...duenn, deckung: .7 });
+      } else {
+        // 裤脚惯性铺开：滞后差值沿小腿外向（A-K 方向）单侧鼓，clamp .08 防钻鞋顶（鞋缘后画会盖住弧肩——读感来自两肩）
+        const slag = lag?.saum?.[s < 0 ? 0 : 1] ?? { x: 0, y: 0 };
+        const sfx = (A.x - K.x) / (Math.hypot(A.x - K.x, A.y - K.y) || 1), sfy = (A.y - K.y) / (Math.hypot(A.x - K.x, A.y - K.y) || 1);
+        const sdrag = clamp((slag.x - (pose.dx + bp.fx)) * sfx + (slag.y - (pose.dy + bp.fy)) * sfy, 0, .08);
+        stift.zug([
+          { x: A.x + nA.x * muendHW, y: A.y + nA.y * muendHW },
+          { x: A.x + sfx * sdrag * .45, y: A.y + sfy * sdrag * .45 },
+          { x: A.x - nA.x * muendHW, y: A.y - nA.y * muendHW },
+        ], { spur: `hosenbein${s}`, ...duenn, deckung: .7 });
+      }
     }
     // 裆部一道短竖线，两腿分叉
     stift.zug([{ x: mx, y: Y(hipY + bodyLen * .1) }, { x: mx, y: Y(hipY + bodyLen * .2) }], { spur: 'schritt', ...duenn, deckung: .55 });
@@ -3045,7 +3083,8 @@ function drawHead(ctx, head, t) {
   drawKopfbedeckungBack(stift, dna, ctx3d, pal);
   ctx.restore();
   // 2.5 身体：骨架链 + 动作姿态（一墙脸/剪报/头像的胸像不画身体）
-  if (!WAND && !CLIP && !AVATAR) drawBody(stift, dna, pal, hals, Math.sin(head.atemW2 ?? (t * head.atemTempo + head.atemPhase)) * (head.atemAmpMul ?? 1), koerperPose);
+  if (!WAND && !CLIP && !AVATAR) drawBody(stift, dna, pal, hals, Math.sin(head.atemW2 ?? (t * head.atemTempo + head.atemPhase)) * (head.atemAmpMul ?? 1), koerperPose,
+    { mansch: head.manschLag, saum: head.saumLag });   // 布口惯性（crowd 精灵代理经原型链继承，帽惯性同路）
   // 3. 耳朵（朝向我们的那只后画）
   const ohrL = feldAn(-1.48, dna.layout.ohrV, ctx3d);
   const ohrR = feldAn(1.48, dna.layout.ohrV, ctx3d);
